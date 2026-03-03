@@ -1,0 +1,43 @@
+# Build artifacts
+*.o
+*.so
+*.a
+obj/
+can-reader/can-reader
+graphics-engine/graphics-engine
+data-logger/data-logger
+
+# clangd
+compile_commands.json
+.cache/
+
+# Node
+node_modules/
+web-server/frontend/dist/
+web-server/backend/dist
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# KiCad
+*.bak
+*-backups/
+
+# Env
+*.env
+
+# AI
+.claude/*
+CLAUDE.md
+.claude
