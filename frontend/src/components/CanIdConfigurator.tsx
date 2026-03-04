@@ -1,0 +1,457 @@
+import { useState } from "react";
+import { ChevronRight, ChevronDown, Trash2, Plus } from "lucide-react";
+import { useEditorState, useEditorDispatch } from "../state/EditorContext";
+import type { FrameDefinition, FrameSignal, SignalType } from "../types";
+
+const SIGNAL_COLORS = [
+  "bg-blue-500",
+  "bg-green-500",
+  "bg-yellow-500",
+  "bg-purple-500",
+  "bg-orange-500",
+  "bg-teal-500",
+  "bg-pink-500",
+  "bg-red-500",
+];
+
+const SIGNAL_TYPES: SignalType[] = [
+  "uint8", "int8", "uint16", "int16", "uint32", "int32", "float", "double",
+];
+
+const SELECT_STYLE = {
+  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+  backgroundPosition: "right 0.375rem center",
+  backgroundRepeat: "no-repeat",
+  backgroundSize: "1.25em 1.25em",
+  paddingRight: "1.75rem",
+};
+
+function wouldOverlap(
+  frame: FrameDefinition,
+  signalIdx: number,
+  startByte: number,
+  length: number
+): boolean {
+  const aEnd = startByte + length;
+  return frame.signals.some((sig, i) => {
+    if (i === signalIdx) return false;
+    return startByte < sig.start_byte + sig.length && aEnd > sig.start_byte;
+  });
+}
+
+export default function CanIdConfigurator() {
+  const state = useEditorState();
+  const dispatch = useEditorDispatch();
+  const { frameParserConfig } = state;
+
+  const [expandedFrames, setExpandedFrames] = useState<Set<string>>(new Set());
+  const [expandedSignals, setExpandedSignals] = useState<Record<string, Set<number>>>({});
+  // Which signal is currently active for byte map interaction
+  const [activeSignal, setActiveSignal] = useState<{ canId: string; signalIdx: number } | null>(null);
+  // Tracks the in-progress byte range selection (visual only until second click)
+  const [byteSelection, setByteSelection] = useState<{ canId: string; signalIdx: number; bytes: number[] } | null>(null);
+  const [newFrameMode, setNewFrameMode] = useState(false);
+  const [newCanId, setNewCanId] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+
+  const toggleFrame = (canId: string) => {
+    setExpandedFrames((prev) => {
+      const next = new Set(prev);
+      if (next.has(canId)) next.delete(canId);
+      else next.add(canId);
+      return next;
+    });
+  };
+
+  const toggleSignal = (canId: string, idx: number) => {
+    const frameSet = new Set(expandedSignals[canId] ?? []);
+    if (frameSet.has(idx)) {
+      frameSet.clear();
+      setActiveSignal(null);
+      setByteSelection(null);
+    } else {
+      frameSet.clear();
+      frameSet.add(idx);
+      setActiveSignal({ canId, signalIdx: idx });
+      setByteSelection(null);
+    }
+    setExpandedSignals((prev) => ({ ...prev, [canId]: frameSet }));
+  };
+
+  const handleCreateFrame = () => {
+    if (!newCanId.trim()) return;
+    const frame: FrameDefinition = {
+      can_id_label: newLabel.trim() || newCanId.trim(),
+      signals: [],
+    };
+    dispatch({ type: "ADD_CAN_FRAME", payload: { canId: newCanId.trim(), frame } });
+    setExpandedFrames((prev) => new Set([...prev, newCanId.trim()]));
+    setNewFrameMode(false);
+    setNewCanId("");
+    setNewLabel("");
+  };
+
+  const handleRemoveFrame = (canId: string) => {
+    dispatch({ type: "REMOVE_CAN_FRAME", payload: { canId } });
+    if (activeSignal?.canId === canId) {
+      setActiveSignal(null);
+      setByteSelection(null);
+    }
+  };
+
+  const handleUpdateLabel = (canId: string, labelVal: string) => {
+    const frame = frameParserConfig[canId];
+    if (!frame) return;
+    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, can_id_label: labelVal } } });
+  };
+
+  const handleAddSignal = (canId: string) => {
+    const frame = frameParserConfig[canId];
+    if (!frame) return;
+    const taken = new Set<number>();
+    frame.signals.forEach((s) => {
+      for (let b = s.start_byte; b < s.start_byte + s.length; b++) taken.add(b);
+    });
+    let freeByte = 0;
+    for (let i = 0; i < 8; i++) { if (!taken.has(i)) { freeByte = i; break; } }
+    const newSignal: FrameSignal = { name: `SIGNAL_${frame.signals.length + 1}`, start_byte: freeByte, length: 1, type: "uint8", scale: 1, offset: 0 };
+    const newIdx = frame.signals.length;
+    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals: [...frame.signals, newSignal] } } });
+    setExpandedSignals((prev) => {
+      const frameSet = new Set(prev[canId] ?? []);
+      frameSet.add(newIdx);
+      return { ...prev, [canId]: frameSet };
+    });
+    setActiveSignal({ canId, signalIdx: newIdx });
+    setByteSelection(null);
+  };
+
+  const handleRemoveSignal = (canId: string, signalIdx: number) => {
+    const frame = frameParserConfig[canId];
+    if (!frame) return;
+    const signals = frame.signals.filter((_, i) => i !== signalIdx);
+    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
+    if (activeSignal?.canId === canId && activeSignal.signalIdx === signalIdx) {
+      setActiveSignal(null);
+      setByteSelection(null);
+    }
+  };
+
+  const handleUpdateSignal = (canId: string, signalIdx: number, updates: Partial<FrameSignal>) => {
+    const frame = frameParserConfig[canId];
+    if (!frame) return;
+    const current = frame.signals[signalIdx]!;
+    const merged = { ...current, ...updates };
+    merged.start_byte = Math.max(0, Math.min(7, merged.start_byte));
+    merged.length = Math.max(1, Math.min(8 - merged.start_byte, merged.length));
+    if (wouldOverlap(frame, signalIdx, merged.start_byte, merged.length)) return;
+    const signals = frame.signals.map((s, i) => (i === signalIdx ? merged : s));
+    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
+  };
+
+  // Called when clicking the frame-level byte map while a signal is active
+  const handleByteClick = (canId: string, byteIdx: number) => {
+    if (!activeSignal || activeSignal.canId !== canId) return;
+    const { signalIdx } = activeSignal;
+    const frame = frameParserConfig[canId];
+    if (!frame) return;
+    const sig = frame.signals[signalIdx];
+    if (!sig) return;
+
+    const isOwnedByActive =
+      byteIdx >= sig.start_byte && byteIdx < sig.start_byte + sig.length;
+
+    if (isOwnedByActive) {
+      // Deselect: shrink range from whichever end was clicked
+      if (sig.length === 1) return; // can't shrink to 0
+      if (byteIdx === sig.start_byte) {
+        handleUpdateSignal(canId, signalIdx, { start_byte: sig.start_byte + 1, length: sig.length - 1 });
+      } else if (byteIdx === sig.start_byte + sig.length - 1) {
+        handleUpdateSignal(canId, signalIdx, { length: sig.length - 1 });
+      }
+      // middle byte: ignore (can't split a consecutive range)
+      setByteSelection(null);
+      return;
+    }
+
+    const isSameSelection =
+      byteSelection?.canId === canId && byteSelection?.signalIdx === signalIdx;
+
+    if (!isSameSelection) {
+      // First click: anchor on this byte, update signal immediately
+      setByteSelection({ canId, signalIdx, bytes: [byteIdx] });
+      handleUpdateSignal(canId, signalIdx, { start_byte: byteIdx, length: 1 });
+    } else {
+      // Second+ click: extend range
+      const existing = byteSelection!.bytes;
+      const min = Math.min(...existing, byteIdx);
+      const max = Math.max(...existing, byteIdx);
+      const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+      setByteSelection({ canId, signalIdx, bytes: range });
+      handleUpdateSignal(canId, signalIdx, { start_byte: min, length: max - min + 1 });
+    }
+  };
+
+  const getByteOwnership = (frame: FrameDefinition): number[] => {
+    const ownership = Array(8).fill(-1);
+    frame.signals.forEach((sig, idx) => {
+      for (let b = sig.start_byte; b < sig.start_byte + sig.length && b < 8; b++) {
+        ownership[b] = idx;
+      }
+    });
+    return ownership;
+  };
+
+  const fieldClass =
+    "w-full rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none";
+
+  return (
+    <div className="flex flex-col">
+      {/* Section header */}
+      <div className="flex items-center justify-between border-b border-gray-700 px-4 py-2.5">
+        <span className="text-sm font-semibold text-gray-200">CAN Frames</span>
+        <button
+          onClick={() => setNewFrameMode((v) => !v)}
+          className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New
+        </button>
+      </div>
+
+      {/* New frame form */}
+      {newFrameMode && (
+        <div className="border-b border-gray-700 px-4 py-3">
+          <div className="mb-2">
+            <label className="mb-1 block text-xs text-gray-400">CAN ID</label>
+            <input
+              type="text"
+              placeholder="0x100"
+              value={newCanId}
+              onChange={(e) => setNewCanId(e.target.value)}
+              className={fieldClass}
+              autoFocus
+            />
+          </div>
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-gray-400">Label</label>
+            <input
+              type="text"
+              placeholder="ENGINE_DATA"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateFrame()}
+              className={fieldClass}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setNewFrameMode(false); setNewCanId(""); setNewLabel(""); }}
+              className="flex-1 rounded py-1.5 text-xs text-gray-400 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateFrame}
+              className="flex-1 rounded bg-blue-600 py-1.5 text-xs text-white hover:bg-blue-500"
+            >
+              Create
+            </button>
+          </div>
+        </div>
+      )}
+
+      {Object.keys(frameParserConfig).length === 0 && !newFrameMode && (
+        <p className="px-4 py-3 text-xs text-gray-500">No CAN frames defined.</p>
+      )}
+
+      {Object.entries(frameParserConfig).map(([canId, frame]) => {
+        const isExpanded = expandedFrames.has(canId);
+        const ownership = getByteOwnership(frame);
+        const isActiveFrame = activeSignal?.canId === canId;
+
+        return (
+          <div key={canId} className="border-b border-gray-700">
+            {/* Frame row */}
+            <div
+              className="flex cursor-pointer items-center gap-2 px-4 py-2.5 hover:bg-white/5"
+              onClick={() => toggleFrame(canId)}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+              )}
+              <span className="font-mono text-sm font-medium text-white">{canId}</span>
+              <span className="flex-1 truncate text-sm text-gray-400">({frame.can_id_label})</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleRemoveFrame(canId); }}
+                className="flex-shrink-0 text-gray-600 hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {isExpanded && (
+              <div className="pl-8 pr-4">
+                {/* Label edit */}
+                <div className="mb-3 pt-2">
+                  <label className="mb-1 block text-xs text-gray-500">Label</label>
+                  <input
+                    type="text"
+                    value={frame.can_id_label}
+                    onChange={(e) => handleUpdateLabel(canId, e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+
+                {/* Byte map — interactive when a signal is active */}
+                <div className="mb-3">
+                  <span className="mb-1.5 block text-xs text-gray-500">
+                    {isActiveFrame
+                      ? `Byte Map — click to assign to ${frame.signals[activeSignal!.signalIdx]?.name ?? "signal"}`
+                      : "Byte Map"}
+                  </span>
+                  <div className="flex gap-1">
+                    {Array.from({ length: 8 }, (_, i) => {
+                      const ownerIdx = ownership[i]!;
+                      const isOwnedByActive =
+                        isActiveFrame && ownerIdx === activeSignal!.signalIdx;
+
+                      let colorClass: string;
+                      if (ownerIdx >= 0) {
+                        const base = SIGNAL_COLORS[ownerIdx % SIGNAL_COLORS.length]!;
+                        colorClass = isActiveFrame && !isOwnedByActive
+                          ? `${base} opacity-40`
+                          : base;
+                      } else {
+                        colorClass = isActiveFrame
+                          ? "bg-gray-700 hover:bg-gray-600"
+                          : "bg-gray-700 text-gray-500";
+                      }
+
+                      const takenByOther = isActiveFrame && ownerIdx >= 0 && !isOwnedByActive;
+
+                      return isActiveFrame ? (
+                        <button
+                          key={i}
+                          onClick={() => !takenByOther && handleByteClick(canId, i)}
+                          disabled={takenByOther}
+                          className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-[11px] font-mono text-white transition ${colorClass} ${isOwnedByActive ? "ring-1 ring-white/50" : ""} ${takenByOther ? "cursor-not-allowed" : "cursor-pointer"}`}
+                        >
+                          {i}
+                        </button>
+                      ) : (
+                        <div
+                          key={i}
+                          className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-[11px] font-mono text-white ${colorClass}`}
+                        >
+                          {i}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Signals */}
+                {frame.signals.length > 0 && (
+                  <div className="mb-2 border-t border-gray-700/60">
+                    {frame.signals.map((sig, sigIdx) => {
+                      const isSigExpanded = expandedSignals[canId]?.has(sigIdx) ?? false;
+                      const sigColor = SIGNAL_COLORS[sigIdx % SIGNAL_COLORS.length]!;
+                      const isThisActive =
+                        activeSignal?.canId === canId && activeSignal.signalIdx === sigIdx;
+
+                      return (
+                        <div key={sigIdx} className="border-b border-gray-700/60">
+                          <div
+                            className="flex cursor-pointer items-center gap-2 py-2 hover:bg-white/5"
+                            onClick={() => toggleSignal(canId, sigIdx)}
+                          >
+                            <div className={`h-2 w-2 flex-shrink-0 rounded-full ${sigColor}`} />
+                            {isSigExpanded ? (
+                              <ChevronDown className="h-3 w-3 flex-shrink-0 text-gray-500" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-500" />
+                            )}
+                            <span className={`flex-1 truncate font-mono text-xs font-medium ${isThisActive ? "text-white" : "text-gray-300"}`}>
+                              {sig.name}
+                            </span>
+                            <span className="flex-shrink-0 text-xs text-gray-500">
+                              {sig.start_byte}–{sig.start_byte + sig.length - 1}
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleRemoveSignal(canId, sigIdx); }}
+                              className="flex-shrink-0 text-gray-600 hover:text-red-400"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+
+                          {isSigExpanded && (
+                            <div className="pb-3 pl-5">
+                              <div className="grid grid-cols-2 gap-x-2 gap-y-2">
+                                <div>
+                                  <label className="mb-1 block text-xs text-gray-500">Name</label>
+                                  <input
+                                    type="text"
+                                    value={sig.name}
+                                    onChange={(e) => handleUpdateSignal(canId, sigIdx, { name: e.target.value })}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-xs text-gray-500">Type</label>
+                                  <select
+                                    value={sig.type}
+                                    onChange={(e) => handleUpdateSignal(canId, sigIdx, { type: e.target.value as SignalType })}
+                                    className="w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none"
+                                    style={SELECT_STYLE}
+                                  >
+                                    {SIGNAL_TYPES.map((t) => (
+                                      <option key={t} value={t} className="bg-gray-900">{t}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-xs text-gray-500">Scale</label>
+                                  <input
+                                    type="number"
+                                    value={sig.scale}
+                                    onChange={(e) => handleUpdateSignal(canId, sigIdx, { scale: parseFloat(e.target.value) || 1 })}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-xs text-gray-500">Offset</label>
+                                  <input
+                                    type="number"
+                                    value={sig.offset}
+                                    onChange={(e) => handleUpdateSignal(canId, sigIdx, { offset: parseFloat(e.target.value) || 0 })}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleAddSignal(canId)}
+                  className="mb-3 flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add Signal
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

@@ -132,9 +132,11 @@ export default function ScreenTabs() {
                 : "bg-gray-700 text-gray-300 hover:bg-gray-600"
             }`}
           >
-            <span className="flex-1 truncate">
+            <span className="flex items-center flex-1 truncate">
               {screen.name}
-              {screen.isDirty ? " *" : ""}
+              {screen.isDirty && (
+                <span className="ml-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
+              )}
             </span>
             {state.screens.length > 1 && (
               <span

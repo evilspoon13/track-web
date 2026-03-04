@@ -7,7 +7,9 @@ export function createInitialState(): EditorState {
     screens: [{ id: screenId, name: "Screen 1", widgets: [] }],
     activeScreenId: screenId,
     selectedWidgetId: null,
-    dbcFile: null,
+    frameParserConfig: {},
+    driverDisplayScreen: null,
+    driverDisplayDirty: false,
   };
 }
 
@@ -99,6 +101,24 @@ export function editorReducer(
       return { ...state, screens };
     }
 
+    case "UPDATE_WIDGET_DATA": {
+      const { id, ...updates } = action.payload;
+      return {
+        ...state,
+        screens: state.screens.map((screen) =>
+          screen.id !== state.activeScreenId
+            ? screen
+            : {
+                ...screen,
+                widgets: screen.widgets.map((w) =>
+                  w.id === id ? { ...w, ...updates } : w
+                ),
+                isDirty: true,
+              }
+        ),
+      };
+    }
+
     case "CLEAR_SCREEN": {
       if (screenIdx === -1) return state;
       const screens = [...state.screens];
@@ -151,7 +171,6 @@ export function editorReducer(
     case "SET_SCREEN_NAME": {
       const screens = state.screens.map((s) => {
         if (s.id !== action.payload.id) return s;
-        // Keep originalName unchanged, only update current name
         return { ...s, name: action.payload.name };
       });
       return { ...state, screens };
@@ -163,6 +182,9 @@ export function editorReducer(
       );
       return { ...state, screens };
     }
+
+    case "MARK_DRIVER_DISPLAY_CLEAN":
+      return { ...state, driverDisplayDirty: false };
 
     case "UPDATE_ORIGINAL_NAME": {
       const screens = state.screens.map((s) =>
@@ -178,9 +200,9 @@ export function editorReducer(
       const newScreen = {
         id,
         name: action.payload.name,
-        originalName: action.payload.name, // Track original name
+        originalName: action.payload.name,
         widgets: action.payload.widgets,
-        isDirty: false, // Loaded screens are clean
+        isDirty: false,
       };
       return {
         ...state,
@@ -190,29 +212,37 @@ export function editorReducer(
       };
     }
 
-    case "LOAD_DBC":
-      return { ...state, dbcFile: action.payload };
+    case "SET_FRAME_PARSER_CONFIG":
+      return { ...state, frameParserConfig: action.payload.config };
 
-    case "CLEAR_DBC":
-      return { ...state, dbcFile: null };
-
-    case "UPDATE_WIDGET_CAN": {
-      const { id, canId, canIdSource } = action.payload;
+    case "ADD_CAN_FRAME": {
+      const { canId, frame } = action.payload;
       return {
         ...state,
-        screens: state.screens.map((screen) =>
-          screen.id === state.activeScreenId
-            ? {
-                ...screen,
-                widgets: screen.widgets.map((w) =>
-                  w.id === id ? { ...w, canId, canIdSource } : w
-                ),
-                isDirty: true,
-              }
-            : screen
-        ),
+        frameParserConfig: { ...state.frameParserConfig, [canId]: frame },
       };
     }
+
+    case "UPDATE_CAN_FRAME": {
+      const { canId, frame } = action.payload;
+      return {
+        ...state,
+        frameParserConfig: { ...state.frameParserConfig, [canId]: frame },
+      };
+    }
+
+    case "REMOVE_CAN_FRAME": {
+      const next = { ...state.frameParserConfig };
+      delete next[action.payload.canId];
+      return { ...state, frameParserConfig: next };
+    }
+
+    case "SET_DRIVER_DISPLAY":
+      return {
+        ...state,
+        driverDisplayScreen: action.payload.screenName,
+        driverDisplayDirty: true,
+      };
 
     default:
       return state;

@@ -5,6 +5,37 @@ export interface WidgetSize {
   rows: number;
 }
 
+// Mirrors frame-parser.types.ts
+export type SignalType =
+  | "uint8"
+  | "int8"
+  | "uint16"
+  | "int16"
+  | "uint32"
+  | "int32"
+  | "float"
+  | "double";
+
+export interface FrameSignal {
+  name: string;
+  start_byte: number;
+  length: number;
+  type: SignalType;
+  scale: number;
+  offset: number;
+}
+
+export interface FrameDefinition {
+  can_id_label: string;
+  signals: FrameSignal[];
+}
+
+// key = "0x..." hex string
+export type FrameParserConfig = Record<string, FrameDefinition>;
+
+// Mirrors graphics.types.ts dataInfo
+export type DataFieldType = "temperature" | "pressure" | "rpm";
+
 export interface PlacedWidget {
   id: string;
   type: WidgetType;
@@ -13,21 +44,14 @@ export interface PlacedWidget {
   row: number; // 0-based grid row
   cols: number; // width in cells
   rows: number; // height in cells
-  // CAN signal binding (optional for backwards compatibility)
-  canId?: string; // Signal name from DBC or custom value
-  canIdSource?: "dbc" | "custom"; // Tracks input method
-}
-
-export interface DbcSignal {
-  id: string; // e.g., "ENGINE_RPM", "WHEEL_SPEED_FL"
-  name: string; // human-readable name
-  unit?: string; // e.g., "rpm", "km/h"
-}
-
-export interface DbcFile {
-  filename: string;
-  signals: DbcSignal[];
-  uploadedAt: string; // ISO timestamp
+  alarm?: boolean;
+  widgetCanId?: string;    // hex string like "0x100", references a key in frameParserConfig
+  widgetSignal?: string;   // signal name within that CAN frame
+  widgetUnit?: DataFieldType;
+  widgetMin?: number;
+  widgetMax?: number;
+  widgetCautionThreshold?: number;
+  widgetCriticalThreshold?: number;
 }
 
 export interface ScreenState {
@@ -42,7 +66,9 @@ export interface EditorState {
   screens: ScreenState[];
   activeScreenId: string;
   selectedWidgetId: string | null;
-  dbcFile: DbcFile | null; // Stores parsed DBC data
+  frameParserConfig: FrameParserConfig;
+  driverDisplayScreen: string | null;
+  driverDisplayDirty: boolean;
 }
 
 export interface SavedLayout {
@@ -57,6 +83,20 @@ export type EditorAction =
   | { type: "REMOVE_WIDGET"; payload: { id: string } }
   | { type: "SELECT_WIDGET"; payload: { id: string | null } }
   | { type: "UPDATE_WIDGET_LABEL"; payload: { id: string; label: string } }
+  | {
+      type: "UPDATE_WIDGET_DATA";
+      payload: {
+        id: string;
+        alarm?: boolean;
+        widgetCanId?: string;
+        widgetSignal?: string;
+        widgetUnit?: DataFieldType;
+        widgetMin?: number;
+        widgetMax?: number;
+        widgetCautionThreshold?: number;
+        widgetCriticalThreshold?: number;
+      };
+    }
   | { type: "CLEAR_SCREEN" }
   | { type: "ADD_SCREEN" }
   | { type: "REMOVE_SCREEN"; payload: { id: string } }
@@ -64,7 +104,10 @@ export type EditorAction =
   | { type: "SET_SCREEN_NAME"; payload: { id: string; name: string } }
   | { type: "UPDATE_ORIGINAL_NAME"; payload: { id: string; originalName: string } }
   | { type: "MARK_CLEAN"; payload: { id: string } }
+  | { type: "MARK_DRIVER_DISPLAY_CLEAN" }
   | { type: "LOAD_SCREEN"; payload: SavedLayout }
-  | { type: "LOAD_DBC"; payload: DbcFile }
-  | { type: "CLEAR_DBC" }
-  | { type: "UPDATE_WIDGET_CAN"; payload: { id: string; canId: string; canIdSource: "dbc" | "custom" } };
+  | { type: "SET_FRAME_PARSER_CONFIG"; payload: { config: FrameParserConfig } }
+  | { type: "ADD_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
+  | { type: "UPDATE_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
+  | { type: "REMOVE_CAN_FRAME"; payload: { canId: string } }
+  | { type: "SET_DRIVER_DISPLAY"; payload: { screenName: string | null } };

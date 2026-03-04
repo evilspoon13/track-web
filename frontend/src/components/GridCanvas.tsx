@@ -56,6 +56,11 @@ export default function GridCanvas({ cellWidth, cellHeight }: Props) {
         }
       >
         {gridLines}
+        {widgets.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <p className="text-sm text-gray-600">Drag a widget onto the canvas</p>
+          </div>
+        )}
         {widgets.map((w) => (
           <PlacedWidget
             key={w.id}
