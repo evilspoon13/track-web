@@ -86,21 +86,6 @@ export function editorReducer(
     case "SELECT_WIDGET":
       return { ...state, selectedWidgetId: action.payload.id };
 
-    case "UPDATE_WIDGET_LABEL": {
-      if (screenIdx === -1) return state;
-      const screens = [...state.screens];
-      screens[screenIdx] = {
-        ...screens[screenIdx]!,
-        widgets: screens[screenIdx]!.widgets.map((w) =>
-          w.id === action.payload.id
-            ? { ...w, label: action.payload.label }
-            : w
-        ),
-        isDirty: true,
-      };
-      return { ...state, screens };
-    }
-
     case "UPDATE_WIDGET_DATA": {
       const { id, ...updates } = action.payload;
       return {

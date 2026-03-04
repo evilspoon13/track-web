@@ -39,7 +39,6 @@ export type DataFieldType = "temperature" | "pressure" | "rpm";
 export interface PlacedWidget {
   id: string;
   type: WidgetType;
-  label: string;
   col: number; // 0-based grid column
   row: number; // 0-based grid row
   cols: number; // width in cells
@@ -82,7 +81,6 @@ export type EditorAction =
   | { type: "RESIZE_WIDGET"; payload: { id: string; cols: number; rows: number } }
   | { type: "REMOVE_WIDGET"; payload: { id: string } }
   | { type: "SELECT_WIDGET"; payload: { id: string | null } }
-  | { type: "UPDATE_WIDGET_LABEL"; payload: { id: string; label: string } }
   | {
       type: "UPDATE_WIDGET_DATA";
       payload: {
