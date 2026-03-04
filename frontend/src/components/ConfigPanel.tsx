@@ -57,21 +57,23 @@ export default function ConfigPanel() {
     "w-full rounded border border-gray-700 bg-transparent px-2 py-1.5 text-xs text-white focus:border-gray-500 focus:outline-none";
 
   return (
-    <div className="flex w-80 flex-col overflow-y-auto border-l border-gray-700 bg-gray-800 scrollbar-hide">
-      {/* CAN ID Configurator */}
-      <div className="border-b border-gray-600">
-        <CanIdConfigurator />
-      </div>
+    <div className="flex w-80 flex-col overflow-hidden border-l border-gray-700 bg-gray-800">
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide">
+        {/* CAN ID Configurator */}
+        <div className="border-b border-gray-600">
+          <CanIdConfigurator />
+        </div>
 
-      {/* Widget Settings */}
-      <div className="flex flex-col px-4 py-3">
-        <h3 className="mb-3 border-b border-gray-700 pb-2 text-sm font-semibold text-gray-200">
-          Widget Settings
-        </h3>
+        {/* Widget Settings */}
+        <div className="flex flex-col px-4 py-3">
+          <h3 className="mb-3 border-b border-gray-700 pb-2 text-sm font-semibold text-gray-200">
+            Widget Settings
+          </h3>
 
-        {!widget ? (
-          <p className="text-xs text-gray-500">Click a widget to configure</p>
-        ) : (
+          {!widget ? (
+            <p className="text-xs text-gray-500">Click a widget to configure</p>
+          ) : (
           <>
             {/* CAN Frame + Signal side by side */}
             <div className="mb-3 grid grid-cols-2 gap-2">
@@ -117,9 +119,9 @@ export default function ConfigPanel() {
               </div>
             </div>
 
-            {/* Unit + Alarm on same row */}
-            <div className="mb-3 flex items-end gap-3">
-              <div className="flex-1">
+            {/* Unit + [Size + Alarm] on same row, Unit aligns with Min */}
+            <div className="mb-3 grid grid-cols-2 items-start gap-2">
+              <div>
                 <label className="mb-1 block text-xs text-gray-500">Unit</label>
                 <select
                   value={widget.widgetUnit ?? ""}
@@ -139,7 +141,32 @@ export default function ConfigPanel() {
                   ))}
                 </select>
               </div>
-              <div className="mb-1.5 flex flex-shrink-0 items-center gap-2">
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <label className="mb-1 block text-xs text-gray-500">Size</label>
+                  <select
+                    value={`${widget.cols}x${widget.rows}`}
+                    onChange={(e) => {
+                      const [c, r] = e.target.value.split("x").map(Number);
+                      handleResize(c!, r!);
+                    }}
+                    className={selectClass}
+                    style={{ ...SELECT_STYLE, paddingRight: "1.5rem" }}
+                  >
+                    {sizes.map((s) => {
+                      const isCurrent = s.cols === widget.cols && s.rows === widget.rows;
+                      const canResize =
+                        isCurrent ||
+                        !hasCollision(widget.col, widget.row, s.cols, s.rows, screen!.widgets, widget.id);
+                      return canResize ? (
+                        <option key={`${s.cols}x${s.rows}`} value={`${s.cols}x${s.rows}`} className="bg-gray-900">
+                          {s.cols} × {s.rows}
+                        </option>
+                      ) : null;
+                    })}
+                  </select>
+                </div>
+                <div className="flex flex-shrink-0 flex-col items-center gap-1.5">
                 <span className="text-xs text-gray-500">Alarm</span>
                 <button
                   role="switch"
@@ -155,6 +182,7 @@ export default function ConfigPanel() {
                     }`}
                   />
                 </button>
+                </div>
               </div>
             </div>
 
@@ -226,52 +254,24 @@ export default function ConfigPanel() {
               </div>
             </div>
 
-            {/* Size */}
-            <div className="mb-4">
-              <label className="mb-1 block text-xs text-gray-500">Size</label>
-              <div className="grid grid-cols-2 gap-2">
-                {sizes.map((s) => {
-                  const isActive = s.cols === widget.cols && s.rows === widget.rows;
-                  const canResize = !hasCollision(
-                    widget.col,
-                    widget.row,
-                    s.cols,
-                    s.rows,
-                    screen!.widgets,
-                    widget.id
-                  );
-                  return (
-                    <button
-                      key={`${s.cols}x${s.rows}`}
-                      onClick={() => canResize && handleResize(s.cols, s.rows)}
-                      disabled={!canResize}
-                      className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                        isActive
-                          ? "bg-blue-600 text-white"
-                          : canResize
-                          ? "border border-gray-700 text-gray-300 hover:border-gray-500 hover:text-white"
-                          : "cursor-not-allowed border border-gray-800 text-gray-600"
-                      }`}
-                    >
-                      {s.cols} × {s.rows}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Delete Widget */}
-            <button
-              onClick={() =>
-                dispatch({ type: "REMOVE_WIDGET", payload: { id: widget.id } })
-              }
-              className="mt-auto rounded border border-red-900 py-1.5 text-xs text-red-400 hover:border-red-700 hover:text-red-300"
-            >
-              Delete Widget
-            </button>
           </>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Delete Widget pinned at bottom */}
+      {widget && (
+        <div className="border-t border-gray-700 px-4 py-3">
+          <button
+            onClick={() =>
+              dispatch({ type: "REMOVE_WIDGET", payload: { id: widget.id } })
+            }
+            className="w-full rounded border border-red-900 py-1.5 text-xs text-red-400 hover:border-red-700 hover:text-red-300"
+          >
+            Delete Widget
+          </button>
+        </div>
+      )}
     </div>
   );
 }

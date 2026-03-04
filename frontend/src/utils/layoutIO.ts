@@ -123,7 +123,8 @@ export async function getFrameParserConfig(): Promise<FrameParserConfig> {
   try {
     const res = await fetch("/api/frame-parser");
     if (res.status === 404) return {};
-    return await res.json();
+    const data = await res.json();
+    return data.frames ?? {};
   } catch {
     return {};
   }
