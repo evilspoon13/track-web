@@ -4,7 +4,7 @@ import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { listScreens, loadScreen, saveScreen, deleteScreen } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
-import { Save, RotateCcw, X } from "lucide-react";
+import { Save, RotateCcw, X, Upload } from "lucide-react";
 
 const widgetTypes: WidgetType[] = [
   "gauge",
@@ -31,11 +31,12 @@ export default function Navbar() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDriverDisplayModal, setShowDriverDisplayModal] = useState(false);
   const [pendingDriverDisplay, setPendingDriverDisplay] = useState<string | null>(null);
+  const [dbcStatus, setDbcStatus] = useState<string>("");
 
   const activeScreen = state.screens.find((s) => s.id === state.activeScreenId);
 
-  const refreshScreens = () => {
-    setAvailableScreens(listScreens());
+  const refreshScreens = async () => {
+    setAvailableScreens(await listScreens());
   };
 
   useEffect(() => {
@@ -47,20 +48,23 @@ export default function Navbar() {
     refreshScreens();
   }, [state.screens.map((s) => s.name).join(",")]);
 
-  const handleLoad = (name: string) => {
+  const handleLoad = async (name: string) => {
     const existing = state.screens.find((s) => s.name === name);
     if (existing) {
       dispatch({ type: "SET_ACTIVE_SCREEN", payload: { id: existing.id } });
       return;
     }
-    const screen = loadScreen(name);
+    const screen = await loadScreen(name);
     if (!screen) return;
     dispatch({ type: "LOAD_SCREEN", payload: screen });
   };
 
-  const executeSave = () => {
+  const executeSave = async () => {
     if (!activeScreen) return;
-    saveScreen({ name: activeScreen.name, widgets: activeScreen.widgets });
+    await saveScreen(
+      { name: activeScreen.name, widgets: activeScreen.widgets },
+      state.frameParserConfig
+    );
     dispatch({
       type: "UPDATE_ORIGINAL_NAME",
       payload: { id: activeScreen.id, originalName: activeScreen.name },
@@ -88,11 +92,11 @@ export default function Navbar() {
     dispatch({ type: "CLEAR_SCREEN" });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!activeScreen) return;
     setShowDeleteModal(false);
     if (activeScreen.originalName) {
-      deleteScreen(activeScreen.originalName);
+      await deleteScreen(activeScreen.originalName);
       refreshScreens();
     }
     dispatch({ type: "REMOVE_SCREEN", payload: { id: activeScreen.id } });
@@ -101,6 +105,19 @@ export default function Navbar() {
   const handleDriverDisplayChange = (value: string) => {
     setPendingDriverDisplay(value || null);
     setShowDriverDisplayModal(true);
+  };
+
+  const handleDbcUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const content = await file.text();
+    await fetch("/api/dbc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    setDbcStatus(file.name);
+    e.target.value = "";
   };
 
   const handleConfirmDriverDisplay = () => {
@@ -221,6 +238,16 @@ export default function Navbar() {
         <div className="border-b border-gray-700 p-4">
           <h1 className="text-lg font-bold text-white">T.R.A.C.K.</h1>
           <p className="text-xs text-gray-400">Configurator</p>
+        </div>
+
+        {/* DBC Upload */}
+        <div className="border-b border-gray-700 p-4">
+          <label className="mb-2 block text-xs font-medium text-gray-400">DBC File</label>
+          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded border border-gray-600 bg-gray-900 px-3 py-2 text-xs text-gray-400 hover:border-gray-500 hover:text-white">
+            <Upload className="h-3.5 w-3.5" />
+            {dbcStatus ? dbcStatus : "Upload .dbc"}
+            <input type="file" accept=".dbc" className="hidden" onChange={handleDbcUpload} />
+          </label>
         </div>
 
         {/* Load Screen Dropdown */}

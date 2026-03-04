@@ -25,7 +25,7 @@ export default function ScreenTabs() {
     setError("");
   };
 
-  const handleSaveName = (screenId: string) => {
+  const handleSaveName = async (screenId: string) => {
     const screen = state.screens.find((s) => s.id === screenId);
     if (!screen) return;
 
@@ -46,9 +46,9 @@ export default function ScreenTabs() {
       return;
     }
 
-    // If renamed, delete old entry from localStorage
+    // If renamed, delete old entry from backend
     if (screen.originalName && screen.originalName !== trimmedName) {
-      deleteScreen(screen.originalName);
+      await deleteScreen(screen.originalName);
     }
 
     // Update name in state
@@ -64,11 +64,11 @@ export default function ScreenTabs() {
         payload: { id: screenId, originalName: trimmedName },
       });
 
-      // Save to localStorage immediately so dropdown updates
-      saveScreen({
-        name: trimmedName,
-        widgets: screen.widgets,
-      });
+      // Save to backend immediately so dropdown updates
+      await saveScreen(
+        { name: trimmedName, widgets: screen.widgets },
+        state.frameParserConfig
+      );
     }
 
     setEditingId(null);
