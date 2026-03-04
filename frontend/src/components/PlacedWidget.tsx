@@ -47,14 +47,11 @@ export default function PlacedWidget({ widget, cellWidth, cellHeight }: Props) {
       }}
       className={`flex cursor-grab flex-col items-center justify-center rounded border-2 text-xs font-semibold select-none ${
         typeColors[widget.type] ?? "border-gray-400 bg-gray-800"
-      } ${isSelected ? "ring-2 ring-white" : ""}`}
+      } ${isSelected ? "ring-2 ring-white" : ""} ${!widget.widgetSignal ? "border-dashed opacity-60" : ""}`}
     >
-      <span className="capitalize">{widget.type}</span>
-      {widget.label && (
-        <span className="mt-0.5 text-[10px] font-normal text-gray-300">
-          {widget.label}
-        </span>
-      )}
+      <span className="w-full truncate px-1 text-center capitalize" title={widget.widgetSignal ?? widget.type}>
+        {widget.widgetSignal ?? widget.type}
+      </span>
     </div>
   );
 }
