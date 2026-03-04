@@ -2,17 +2,25 @@ import {
   createContext,
   useContext,
   useReducer,
+  useEffect,
   type Dispatch,
   type ReactNode,
 } from "react";
 import type { EditorState, EditorAction } from "../types";
 import { editorReducer, createInitialState } from "./editorReducer";
+import { getFrameParserConfig } from "../utils/layoutIO";
 
 const EditorStateContext = createContext<EditorState | null>(null);
 const EditorDispatchContext = createContext<Dispatch<EditorAction> | null>(null);
 
 export function EditorProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(editorReducer, null, createInitialState);
+
+  useEffect(() => {
+    getFrameParserConfig().then((config) =>
+      dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config } })
+    );
+  }, []);
 
   return (
     <EditorStateContext.Provider value={state}>

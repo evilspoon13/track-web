@@ -123,7 +123,6 @@ function EditorLayout() {
           payload: {
             id: uuidv4(),
             type: widgetType,
-            label: "",
             col: clamped.col,
             row: clamped.row,
             cols: finalSize.cols,
@@ -200,11 +199,6 @@ function EditorLayout() {
           }}
         >
           <span className="capitalize">{widget.type}</span>
-          {widget.label && (
-            <span className="mt-0.5 text-[10px] font-normal text-gray-300">
-              {widget.label}
-            </span>
-          )}
         </div>
       );
     }

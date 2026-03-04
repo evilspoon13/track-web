@@ -1,0 +1,29 @@
+{
+  "screens": [
+    {
+      "name": "Screen 1",
+      "widgets": [
+        {
+          "type": "gauge",
+          "alarm": false,
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          },
+          "data": {
+            "can_id": 0,
+            "can_id_label": "",
+            "signal": "",
+            "unit": "rpm",
+            "min": 0,
+            "max": 100,
+            "caution_threshold": 0,
+            "critical_threshold": 0
+          }
+        }
+      ]
+    }
+  ]
+}

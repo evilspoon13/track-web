@@ -34,8 +34,8 @@ export default function Navbar() {
 
   const activeScreen = state.screens.find((s) => s.id === state.activeScreenId);
 
-  const refreshScreens = () => {
-    setAvailableScreens(listScreens());
+  const refreshScreens = async () => {
+    setAvailableScreens(await listScreens());
   };
 
   useEffect(() => {
@@ -47,20 +47,23 @@ export default function Navbar() {
     refreshScreens();
   }, [state.screens.map((s) => s.name).join(",")]);
 
-  const handleLoad = (name: string) => {
+  const handleLoad = async (name: string) => {
     const existing = state.screens.find((s) => s.name === name);
     if (existing) {
       dispatch({ type: "SET_ACTIVE_SCREEN", payload: { id: existing.id } });
       return;
     }
-    const screen = loadScreen(name);
+    const screen = await loadScreen(name);
     if (!screen) return;
     dispatch({ type: "LOAD_SCREEN", payload: screen });
   };
 
-  const executeSave = () => {
+  const executeSave = async () => {
     if (!activeScreen) return;
-    saveScreen({ name: activeScreen.name, widgets: activeScreen.widgets });
+    await saveScreen(
+      { name: activeScreen.name, widgets: activeScreen.widgets },
+      state.frameParserConfig
+    );
     dispatch({
       type: "UPDATE_ORIGINAL_NAME",
       payload: { id: activeScreen.id, originalName: activeScreen.name },
@@ -88,11 +91,11 @@ export default function Navbar() {
     dispatch({ type: "CLEAR_SCREEN" });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!activeScreen) return;
     setShowDeleteModal(false);
     if (activeScreen.originalName) {
-      deleteScreen(activeScreen.originalName);
+      await deleteScreen(activeScreen.originalName);
       refreshScreens();
     }
     dispatch({ type: "REMOVE_SCREEN", payload: { id: activeScreen.id } });
