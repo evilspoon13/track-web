@@ -233,13 +233,8 @@ export default function Navbar() {
         </div>
       )}
 
-      <div className="flex h-screen w-72 flex-col border-r border-gray-700 bg-gray-800">
+      <div className="flex h-full w-72 flex-col border-r border-gray-700 bg-gray-800">
         {/* Header */}
-        <div className="border-b border-gray-700 p-4">
-          <h1 className="text-lg font-bold text-white">T.R.A.C.K.</h1>
-          <p className="text-xs text-gray-400">Configurator</p>
-        </div>
-
         {/* DBC Upload */}
         <div className="border-b border-gray-700 p-4">
           <label className="mb-2 block text-xs font-medium text-gray-400">DBC File</label>
