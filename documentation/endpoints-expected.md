@@ -66,7 +66,7 @@ Before reading the endpoint specs, understand how the three layers relate to eac
 
 ## 1. Authentication
 
-> **Current state:** Entirely mocked. Clicking "Sign in with Google" sets a local boolean — no network call is made.
+> **Eliminated.** Firebase Auth SDK handles Google sign-in, session persistence (`onAuthStateChanged`), and logout (`signOut`). The backend verifies the Firebase ID token sent as `Authorization: Bearer <token>` on each request — no backend JWT needed. These three endpoints are dropped.
 
 ### 1.1 Google OAuth Login
 
@@ -219,7 +219,7 @@ Frontend polls this every 5 seconds once a UUID has been entered.
 
 ## 3. Screen & Widget Layout
 
-> **Current state:** All four of these endpoints are already wired in the frontend via `frontend/src/utils/layoutIO.ts`. Configs are currently written to disk on the backend server. Once the cloud DB is available, the backend should persist them there instead and push the active config down to the connected Pi over the hardware WS channel.
+> **Current state:** All four endpoints are wired via `layoutIO.ts`. Requests now carry `Authorization: Bearer <token>` (Firebase ID token) via the `authFetch` helper. Backend should verify this token and use the decoded `uid` to scope reads/writes per user once Firestore is wired.
 
 The grid is **10 columns × 6 rows**, each cell **80 × 80 px** (800 × 480 display target).
 
@@ -727,9 +727,9 @@ type FrameParserConfig = Record<string, FrameDefinition>;
 
 | # | Endpoint | Method | Backend | Frontend | Contract | Notes |
 |---|---|---|---|---|---|---|
-| 1 | `/api/auth/google` | POST | ✗ | ✗ mocked | — | Planned |
-| 2 | `/api/auth/logout` | POST | ✗ | ✗ mocked | — | Planned |
-| 3 | `/api/auth/me` | GET | ✗ | ✗ mocked | — | Planned |
+| 1 | `/api/auth/google` | POST | — | — | — | Eliminated — Firebase Auth SDK |
+| 2 | `/api/auth/logout` | POST | — | — | — | Eliminated — `signOut(auth)` |
+| 3 | `/api/auth/me` | GET | — | — | — | Eliminated — `onAuthStateChanged` |
 | 4 | `/api/pi/connect` | POST | ✗ | ✗ mocked | — | Planned |
 | 5 | `/api/pi/status` | GET | ✗ | ✗ mocked | — | Planned |
 | 6 | `/api/graphics/screens` | GET | ✓ | ✓ | ✓ | Working |
@@ -753,9 +753,9 @@ type FrameParserConfig = Record<string, FrameDefinition>;
 
 | # | Endpoint | What it does | Where to find it |
 |---|---|---|---|
-| 1 | POST `/api/auth/google` | Signs in with a Google ID token, returns a session JWT | `frontend/src/` — mocked in auth state |
-| 2 | POST `/api/auth/logout` | Invalidates the session | `frontend/src/` — mocked in auth state |
-| 3 | GET `/api/auth/me` | Checks if the current token is still valid | `frontend/src/` — mocked in auth state |
+| 1 | POST `/api/auth/google` | ~~Signs in with Google~~ | Eliminated — Firebase Auth SDK |
+| 2 | POST `/api/auth/logout` | ~~Invalidates the session~~ | Eliminated — `signOut(auth)` |
+| 3 | GET `/api/auth/me` | ~~Checks token validity~~ | Eliminated — `onAuthStateChanged` |
 | 4 | POST `/api/pi/connect` | Registers a Pi UUID with the backend, opens the hardware WS | `frontend/src/components/Navbar.tsx` — mocked |
 | 5 | GET `/api/pi/status` | Returns whether the Pi WS is currently connected | `frontend/src/components/Navbar.tsx` — mocked |
 | 6 | GET `/api/graphics/screens` | Returns the list of saved screen names | `frontend/src/utils/layoutIO.ts:fetchScreenList` |

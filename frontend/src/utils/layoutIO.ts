@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import { auth } from "../lib/firebase";
 import type {
   SavedLayout,
   PlacedWidget,
@@ -28,6 +29,17 @@ interface BackendWidgetInfo {
 interface BackendScreenInfo {
   name: string;
   widgets: BackendWidgetInfo[];
+}
+
+async function authFetch(input: string, init?: RequestInit): Promise<Response> {
+  const token = await auth.currentUser?.getIdToken();
+  return fetch(input, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
 }
 
 function widgetToBackend(
@@ -73,7 +85,7 @@ function widgetFromBackend(wi: BackendWidgetInfo): PlacedWidget {
 
 export async function listScreens(): Promise<string[]> {
   try {
-    const res = await fetch("/api/graphics/screens");
+    const res = await authFetch("/api/graphics/screens");
     if (res.status === 404) return [];
     const data = await res.json();
     return data.screens ?? [];
@@ -84,7 +96,7 @@ export async function listScreens(): Promise<string[]> {
 
 export async function loadScreen(name: string): Promise<SavedLayout | null> {
   try {
-    const res = await fetch(`/api/graphics/screens/${encodeURIComponent(name)}`);
+    const res = await authFetch(`/api/graphics/screens/${encodeURIComponent(name)}`);
     if (res.status === 404) return null;
     const screen: BackendScreenInfo = await res.json();
     return {
@@ -106,7 +118,7 @@ export async function saveScreen(
       .map((w) => widgetToBackend(w, frameParserConfig))
       .filter((w): w is BackendWidgetInfo => w !== null),
   };
-  await fetch(`/api/graphics/screens/${encodeURIComponent(screen.name)}`, {
+  await authFetch(`/api/graphics/screens/${encodeURIComponent(screen.name)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -114,14 +126,14 @@ export async function saveScreen(
 }
 
 export async function deleteScreen(name: string): Promise<void> {
-  await fetch(`/api/graphics/screens/${encodeURIComponent(name)}`, {
+  await authFetch(`/api/graphics/screens/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });
 }
 
 export async function getFrameParserConfig(): Promise<FrameParserConfig> {
   try {
-    const res = await fetch("/api/frame-parser");
+    const res = await authFetch("/api/frame-parser");
     if (res.status === 404) return {};
     const data = await res.json();
     return data.frames ?? {};
@@ -134,7 +146,7 @@ export async function saveCanFrame(
   canId: string,
   frame: FrameDefinition
 ): Promise<void> {
-  await fetch("/api/frame-parser", {
+  await authFetch("/api/frame-parser", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ can_id: canId, frameDefinition: frame }),
