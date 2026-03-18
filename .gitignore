@@ -36,6 +36,7 @@ logs/
 
 # Env
 *.env
+.env.local
 
 # AI
 .claude/*
@@ -43,3 +44,4 @@ CLAUDE.md
 .claude
 .mcp.json
 .playwright-mcp
+frontend/dist/

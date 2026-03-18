@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
+
 // ─── Fake time-series (30 samples ≈ last 30 s) ───────────────────────────────
 
-const SERIES: Record<string, number[]> = {
+const INITIAL_SERIES: Record<string, number[]> = {
   rpm:   [5980,6120,6380,6520,6480,6620,6750,6420,6380,6450,6510,6580,6420,6350,6480,6590,6680,6420,6380,6510,6620,6750,6800,6680,6590,6420,6380,6450,6420,6420],
   spd:   [88,90,93,96,98,100,102,99,97,95,96,98,100,102,104,101,99,98,99,100,102,104,106,105,103,101,100,99,98,98],
   thr:   [72,78,82,85,88,90,87,84,82,85,88,90,87,85,88,90,92,87,85,88,90,87,85,88,90,87,85,88,87,87],
@@ -25,29 +27,26 @@ interface Cell {
   seriesKey?: string;
   yMin?: number;
   yMax?: number;
-  current?: string;
   warn?: number;
   crit?: number;
   colSpan?: number;
-  latG?: number;
-  longG?: number;
 }
 
 const CELLS: Cell[] = [
   // Row 1 — powertrain
-  { id: "rpm",   type: "graph",   label: "MOTOR RPM",       unit: "rpm", seriesKey: "rpm",   yMin: 0,   yMax: 8000, current: "6,420" },
-  { id: "spd",   type: "graph",   label: "VEHICLE SPEED",   unit: "km/h",seriesKey: "spd",   yMin: 0,   yMax: 160,  current: "98"    },
-  { id: "thr",   type: "graph",   label: "THROTTLE POS",    unit: "%",   seriesKey: "thr",   yMin: 0,   yMax: 100,  current: "87"    },
-  { id: "brk",   type: "graph",   label: "BRAKE PRESSURE",  unit: "bar", seriesKey: "brk",   yMin: 0,   yMax: 80,   current: "34"    },
+  { id: "rpm",   type: "graph",   label: "MOTOR RPM",       unit: "rpm", seriesKey: "rpm",   yMin: 0,   yMax: 8000 },
+  { id: "spd",   type: "graph",   label: "VEHICLE SPEED",   unit: "km/h",seriesKey: "spd",   yMin: 0,   yMax: 160  },
+  { id: "thr",   type: "graph",   label: "THROTTLE POS",    unit: "%",   seriesKey: "thr",   yMin: 0,   yMax: 100  },
+  { id: "brk",   type: "graph",   label: "BRAKE PRESSURE",  unit: "bar", seriesKey: "brk",   yMin: 0,   yMax: 80   },
   // Row 2 — thermal / electrical
-  { id: "mtmp",  type: "graph",   label: "MOTOR TEMP",      unit: "°C",  seriesKey: "mtmp",  yMin: 60,  yMax: 120,  current: "72",  warn: 90,  crit: 110 },
-  { id: "itmp",  type: "graph",   label: "INVERTER TEMP",   unit: "°C",  seriesKey: "itmp",  yMin: 55,  yMax: 100,  current: "68",  warn: 80,  crit: 95  },
-  { id: "pvolt", type: "graph",   label: "PACK VOLTAGE",    unit: "V",   seriesKey: "pvolt", yMin: 380, yMax: 400,  current: "392.4" },
-  { id: "soc",   type: "graph",   label: "STATE OF CHARGE", unit: "%",   seriesKey: "soc",   yMin: 0,   yMax: 100,  current: "73"   },
+  { id: "mtmp",  type: "graph",   label: "MOTOR TEMP",      unit: "°C",  seriesKey: "mtmp",  yMin: 60,  yMax: 120, warn: 90,  crit: 110 },
+  { id: "itmp",  type: "graph",   label: "INVERTER TEMP",   unit: "°C",  seriesKey: "itmp",  yMin: 55,  yMax: 100, warn: 80,  crit: 95  },
+  { id: "pvolt", type: "graph",   label: "PACK VOLTAGE",    unit: "V",   seriesKey: "pvolt", yMin: 380, yMax: 400  },
+  { id: "soc",   type: "graph",   label: "STATE OF CHARGE", unit: "%",   seriesKey: "soc",   yMin: 0,   yMax: 100  },
   // Row 3 — map / dynamics / timing
   { id: "gps",    type: "gps",    label: "GPS POSITION",    colSpan: 2   },
-  { id: "gforce", type: "gforce", label: "G-FORCE",         latG: 1.8, longG: -0.4 },
-  { id: "lap",    type: "laptime",label: "LAP TIME",        current: "1:24.3" },
+  { id: "gforce", type: "gforce", label: "G-FORCE"                       },
+  { id: "lap",    type: "laptime",label: "LAP TIME"                      },
 ];
 
 // ─── SVG components ───────────────────────────────────────────────────────────
@@ -176,8 +175,22 @@ function GForcePlot({ latG, longG }: { latG: number; longG: number }) {
 
 // ─── Cell renderer ────────────────────────────────────────────────────────────
 
-function TelemetryCell({ cell }: { cell: Cell }) {
-  const numVal = parseFloat((cell.current ?? "0").replace(",", "")) || 0;
+function TelemetryCell({
+  cell,
+  seriesData,
+  currentVal,
+  latG,
+  longG,
+  lap,
+}: {
+  cell: Cell;
+  seriesData: Record<string, number[]>;
+  currentVal?: string;
+  latG?: number;
+  longG?: number;
+  lap?: { current: string; sectors: number[]; best: string };
+}) {
+  const numVal = parseFloat((currentVal ?? "0").replace(",", "")) || 0;
   const valueColor =
     cell.crit && numVal >= cell.crit ? "text-red-400" :
     cell.warn && numVal >= cell.warn ? "text-amber-400" : "text-white";
@@ -208,44 +221,45 @@ function TelemetryCell({ cell }: { cell: Cell }) {
           <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">{cell.label}</span>
           <div className="flex flex-col items-end gap-0.5">
             <span className="text-[10px] font-mono text-gray-600">
-              LAT <span className="text-gray-300">{cell.latG?.toFixed(2)}g</span>
+              LAT <span className="text-gray-300">{(latG ?? 0).toFixed(2)}g</span>
             </span>
             <span className="text-[10px] font-mono text-gray-600">
-              LON <span className="text-gray-300">{cell.longG?.toFixed(2)}g</span>
+              LON <span className="text-gray-300">{(longG ?? 0).toFixed(2)}g</span>
             </span>
           </div>
         </div>
         <div className="flex-1 min-h-0">
-          <GForcePlot latG={cell.latG!} longG={cell.longG!} />
+          <GForcePlot latG={latG ?? 0} longG={longG ?? 0} />
         </div>
       </div>
     );
   }
 
   if (cell.type === "laptime") {
+    const sectors = lap?.sectors ?? [28.1, 31.4, 24.8];
     return (
       <div className={`${colSpanClass} bg-gray-950 rounded-xl flex flex-col justify-between p-4`}>
         <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">{cell.label}</span>
         <div>
           <span className="font-mono text-3xl font-bold tabular-nums text-white leading-none">
-            {cell.current}
+            {currentVal ?? "—"}
           </span>
           <div className="mt-3 flex flex-col gap-1 text-[10px] font-mono">
             <div className="flex justify-between">
               <span className="text-gray-600">SECTOR 1</span>
-              <span className="text-gray-400">28.1</span>
+              <span className="text-gray-400">{sectors[0]}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">SECTOR 2</span>
-              <span className="text-gray-400">31.4</span>
+              <span className="text-gray-400">{sectors[1]}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">SECTOR 3</span>
-              <span className="text-gray-400">24.8</span>
+              <span className="text-gray-400">{sectors[2]}</span>
             </div>
             <div className="mt-1 flex justify-between border-t border-gray-800 pt-1">
               <span className="text-gray-600">BEST</span>
-              <span className="text-gray-500">1:22.9</span>
+              <span className="text-gray-500">{lap?.best ?? "1:22.9"}</span>
             </div>
           </div>
         </div>
@@ -262,7 +276,7 @@ function TelemetryCell({ cell }: { cell: Cell }) {
         </span>
         <div className="flex items-baseline gap-1 ml-2">
           <span className={`text-xl font-bold tabular-nums leading-none ${valueColor}`}>
-            {cell.current}
+            {currentVal ?? "—"}
           </span>
           <span className="text-[10px] text-gray-600">{cell.unit}</span>
         </div>
@@ -272,7 +286,7 @@ function TelemetryCell({ cell }: { cell: Cell }) {
           <>
             <LineGraph
               id={cell.id}
-              values={SERIES[cell.seriesKey] ?? []}
+              values={seriesData[cell.seriesKey] ?? []}
               yMin={cell.yMin!}
               yMax={cell.yMax!}
               warn={cell.warn}
@@ -293,11 +307,77 @@ function TelemetryCell({ cell }: { cell: Cell }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TelemetryPage() {
+  const [series, setSeries] = useState<Record<string, number[]>>(INITIAL_SERIES);
+  const [currents, setCurrents] = useState<Record<string, string>>({
+    rpm: "6,420", spd: "98", thr: "87", brk: "34",
+    mtmp: "72", itmp: "68", pvolt: "392.4", soc: "73",
+  });
+  const [gforce, setGforce] = useState({ latG: 1.8, longG: -0.4 });
+  const [lap, setLap] = useState({ current: "1:24.3", sectors: [28.1, 31.4, 24.8], best: "1:22.9" });
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const ws = new WebSocket(`ws://${window.location.host}/ws/client`);
+
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => setConnected(false);
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data as string) as { type: string; payload: string };
+        if (msg.type !== "Telemetry") return;
+        const data = JSON.parse(msg.payload) as {
+          signals?: Record<string, number>;
+          gps?: { lat: number; lon: number; lock: boolean };
+          lap?: { current: number; sectors: number[]; best: number };
+        };
+
+        if (data.signals) {
+          setSeries((prev) => {
+            const next = { ...prev };
+            for (const [key, val] of Object.entries(data.signals!)) {
+              const arr = prev[key] ?? [];
+              next[key] = [...arr.slice(-29), val];
+            }
+            return next;
+          });
+          setCurrents((prev) => ({
+            ...prev,
+            ...Object.fromEntries(Object.entries(data.signals!).map(([k, v]) => [k, String(v)])),
+          }));
+          if (data.signals.latg !== undefined) setGforce((g) => ({ ...g, latG: data.signals!.latg! }));
+          if (data.signals.long !== undefined) setGforce((g) => ({ ...g, longG: data.signals!.long! }));
+        }
+        if (data.lap) setLap({
+          current: String(data.lap.current),
+          sectors: data.lap.sectors,
+          best: String(data.lap.best),
+        });
+      } catch {
+        // ignore malformed messages
+      }
+    };
+
+    return () => ws.close();
+  }, []);
+
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden bg-gray-900">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
+        <div className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-green-500" : "bg-gray-600"}`} />
+        <span className="text-[10px] font-mono text-gray-600">{connected ? "LIVE" : "NO SIGNAL"}</span>
+      </div>
       <div className="absolute inset-0 grid grid-cols-4 grid-rows-3 gap-3 p-3 bg-gray-900">
         {CELLS.map((cell) => (
-          <TelemetryCell key={cell.id} cell={cell} />
+          <TelemetryCell
+            key={cell.id}
+            cell={cell}
+            seriesData={series}
+            currentVal={cell.type === "laptime" ? lap.current : currents[cell.id]}
+            latG={gforce.latG}
+            longG={gforce.longG}
+            lap={lap}
+          />
         ))}
       </div>
     </div>

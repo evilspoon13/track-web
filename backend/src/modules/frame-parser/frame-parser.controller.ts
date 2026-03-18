@@ -18,11 +18,10 @@ export async function getConfig(req: Request, res: Response) {
   }
 }
 
-export async function updateConfig(req: Request<{can_id: `0x${string}`, frameDef: FrameDefinition}>, res:Response) {
+export async function updateConfig(req: Request, res: Response) {
   try {
-    const can_id = req.params.can_id;
-    const frameDef = req.params.frameDef;
-    await frameParserService.updateConfig(can_id, frameDef);
+    const { can_id, frameDefinition } = req.body as { can_id: `0x${string}`; frameDefinition: FrameDefinition };
+    await frameParserService.updateConfig(can_id, frameDefinition);
     res.status(200).json({success: true});
   } catch (error) {
     res.status(500).json({success: false, msg: error});
