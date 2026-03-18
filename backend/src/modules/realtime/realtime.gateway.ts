@@ -7,32 +7,33 @@ export function createRealtimeGateway(server: HttpServer): void {
 
   wss.on("connection", (socket: WebSocket, req) => {
     const path = req.url ?? "";
-    const id = Date.now().toString();
+    let activePiId: string | undefined;
+    let activeClientId: string | undefined;
 
     if (path === "/ws/pi") {
       console.log("[ws] Pi connected");
-      RealtimeService.registerPi(id, socket);
-
       socket.on("message", (data) => {
-        RealtimeService.handlePiMessage(id, data);
+        activePiId = RealtimeService.handlePiMessage(socket, data, activePiId);
       });
 
       socket.on("close", () => {
         console.log("[ws] Pi disconnected");
-        RealtimeService.disconnectPi(id);
+        if (activePiId) {
+          RealtimeService.disconnectPi(activePiId);
+        }
       });
     }
     else if (path === "/ws/client") {
       console.log("[ws] client connected");
-      RealtimeService.registerClient(id, socket);
-
       socket.on("message", (data) => {
-        RealtimeService.handleClientMessage(id, data);
+        activeClientId = RealtimeService.handleClientMessage(socket, data, activeClientId);
       });
 
       socket.on("close", () => {
         console.log("[ws] client disconnected");
-        RealtimeService.disconnectClient(id);
+        if (activeClientId) {
+          RealtimeService.disconnectClient(activeClientId);
+        }
       });
     }
     else {

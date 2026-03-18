@@ -3,90 +3,239 @@ import type { PiConnection, ClientConnection } from "./realtime.types";
 
 let clientSockets = new Map<string, ClientConnection>();
 const piSockets = new Map<string, PiConnection>();
+const socketToPiId = new Map<WebSocket, string>();
+const socketToClientId = new Map<WebSocket, string>();
 let currentPi: WebSocket | null = null;
 const PI_DEADLINE_MS = 20_000;
 const PI_MONITOR_INTERVAL_MS = 5_000;
 
 setInterval(() => {
   const now = Date.now();
-  for (const [id, connection] of piSockets.entries()) {
+  for (const [piId, connection] of piSockets.entries()) {
     const ageMs = now - connection.lastHeartbeat;
     if (ageMs > PI_DEADLINE_MS) {
-      console.log(`[ws] Pi ${id} stale (${ageMs}ms). dropping`);
+      console.log(`[ws] Pi ${piId} stale (${ageMs}ms). dropping`);
       try {
-        connection.socket.terminate();
+        connection.socket.close(1000, "Pi heartbeat missed");
       } catch {
         // ignore close failures
       }
-      disconnectPi(id);
+      disconnectPi(piId);
     }
   }
 }, PI_MONITOR_INTERVAL_MS);
 
-export function registerPi(id: string, socket: WebSocket) {
+function normalizePiId(parsed: { device_id?: unknown }): string | null {
+  if (typeof parsed.device_id === "string" && parsed.device_id.trim().length > 0) {
+    return parsed.device_id;
+  }
+
+  return null;
+}
+
+function normalizeClientId(parsed: { client_id?: unknown }): string | null {
+  if (typeof parsed.client_id === "string" && parsed.client_id.trim().length > 0) {
+    return parsed.client_id;
+  }
+
+  return null;
+}
+
+function registerPiById(piId: string, socket: WebSocket): PiConnection {
+  const existingForSocket = socketToPiId.get(socket);
+  if (existingForSocket && existingForSocket !== piId) {
+    piSockets.delete(existingForSocket);
+  }
+
+  const existing = piSockets.get(piId);
+  if (existing) {
+    if (existing.socket !== socket) {
+      try {
+        existing.socket.close(1000, "Pi web socket replaced");
+      } catch {
+        // ignore close failures
+      }
+    }
+
+    existing.connectedAt = Date.now();
+    existing.lastHeartbeat = Date.now();
+    existing.socket = socket;
+    socketToPiId.set(socket, piId);
+    piSockets.set(piId, existing);
+    currentPi = socket;
+    return existing;
+  }
+
   const connection: PiConnection = {
     socket,
     connectedAt: Date.now(),
     lastHeartbeat: Date.now(),
   };
 
-  piSockets.set(id, connection);
+  piSockets.set(piId, connection);
+  socketToPiId.set(socket, piId);
   currentPi = socket;
   return connection;
 }
 
-export function registerClient(id: string, socket: WebSocket) {
+function registerClientById(clientId: string, socket: WebSocket): ClientConnection {
+  const existingForSocket = socketToClientId.get(socket);
+  if (existingForSocket && existingForSocket !== clientId) {
+    clientSockets.delete(existingForSocket);
+  }
+
+  const existing = clientSockets.get(clientId);
+  if (existing) {
+    if (existing.socket !== socket) {
+      try {
+        existing.socket.close(1000, "Client web socket replaced");
+      } catch {
+        // ignore close failures
+      }
+    }
+
+    existing.connectedAt = Date.now();
+    existing.lastHeartbeat = Date.now();
+    existing.socket = socket;
+    socketToClientId.set(socket, clientId);
+    clientSockets.set(clientId, existing);
+    return existing;
+  }
+
   const connection: ClientConnection = {
     socket,
     connectedAt: Date.now(),
     lastHeartbeat: Date.now(),
   };
 
-  clientSockets.set(id, connection);
+  clientSockets.set(clientId, connection);
+  socketToClientId.set(socket, clientId);
   return connection;
 }
 
-export function disconnectPi(id: string) {
-  if (currentPi == piSockets.get(id)?.socket) {
+export function disconnectPi(piId: string) {
+  const connection = piSockets.get(piId);
+  if (!connection) {
+    return;
+  }
+
+  if (currentPi === connection.socket) {
     currentPi = null;
   }
 
-  piSockets.delete(id);
+  if (socketToPiId.get(connection.socket) === piId) {
+    socketToPiId.delete(connection.socket);
+  }
+
+  piSockets.delete(piId);
 }
 
 export function disconnectClient(id: string) {
+  const connection = clientSockets.get(id);
+  if (!connection) {
+    return;
+  }
+
+  if (socketToClientId.get(connection.socket) === id) {
+    socketToClientId.delete(connection.socket);
+  }
+
   clientSockets.delete(id);
 }
 
-export function handlePiMessage(id: string, data: RawData): void {
+export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId?: string): string | undefined {
   const message = data.toString();
-  const connection = piSockets.get(id);
-  if (connection) {
-    connection.lastHeartbeat = Date.now();
-  }
+  let activePiId = registeredPiId;
 
-  // Cloud bridge sends a heartbeat message every second like:
-  // {"type":"heartbeat","status":"connected","ts":123,"device_id":"..."}
+  // Heartbeat path carries pi identity and should be used for registration
   try {
     const parsed = JSON.parse(message);
-    if (parsed && typeof parsed === "object" && (parsed as { type?: string }).type === "heartbeat") {
-      return;
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as { type?: string; device_id?: unknown; payload?: unknown };
+      if (obj.type === "heartbeat") {
+        const nextPiId = normalizePiId(obj);
+        if (nextPiId) {
+          const connection = piSockets.get(nextPiId);
+          if (!connection || connection.socket !== socket) {
+            registerPiById(nextPiId, socket);
+          } else {
+            connection.lastHeartbeat = Date.now();
+          }
+
+          activePiId = nextPiId;
+        } else if (registeredPiId) {
+          const connection = piSockets.get(registeredPiId);
+          if (connection && connection.socket === socket) {
+            connection.lastHeartbeat = Date.now();
+          }
+        }
+      } else if (obj.type === "telemetry") {
+        if (!activePiId) {
+          activePiId = normalizePiId(obj) || activePiId;
+        }
+
+        if (activePiId) {
+          const connection = piSockets.get(activePiId);
+          if (connection && connection.socket === socket) {
+            const telemetryPayload = JSON.stringify({
+              type: "Telemetry",
+              device_id: activePiId,
+              payload: obj.payload ?? obj,
+            });
+
+            for (const clientConnection of clientSockets.values()) {
+              if (clientConnection.socket.readyState === WebSocket.OPEN) {
+                clientConnection.socket.send(telemetryPayload);
+              }
+            }
+          }
+        }
+
+        return activePiId;
+      }
     }
   } catch {
-    // non-JSON messages fall through below
+    // ignore malformed non-JSON packets
   }
-
-  for (const connection of clientSockets.values()) {
-    if (connection.socket.readyState === WebSocket.OPEN) {
-      connection.socket.send(JSON.stringify({ type: "Telemetry", payload: message }));
-    }
-  }
+  return activePiId;
 }
 
-export function handleClientMessage(id: string, data: RawData): void {
+export function handleClientMessage(
+  socket: WebSocket,
+  data: RawData,
+  registeredClientId?: string
+): string | undefined {
   const message = data.toString();
+  let activeClientId = registeredClientId;
 
-  if (currentPi && currentPi.readyState == WebSocket.OPEN) {
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as { client_id?: unknown };
+      const nextClientId = normalizeClientId(obj);
+      if (nextClientId) {
+        const connection = clientSockets.get(nextClientId);
+        if (!connection || connection.socket !== socket) {
+          registerClientById(nextClientId, socket);
+        } else {
+          connection.lastHeartbeat = Date.now();
+        }
+
+        activeClientId = nextClientId;
+      } else if (registeredClientId) {
+        const connection = clientSockets.get(registeredClientId);
+        if (connection && connection.socket === socket) {
+          connection.lastHeartbeat = Date.now();
+        }
+      }
+    }
+  } catch {
+    // ignore malformed non-JSON packets
+  }
+
+  if (activeClientId && currentPi && currentPi.readyState == WebSocket.OPEN) {
     currentPi.send(JSON.stringify({ type: "config:update", payload: "New update incoming: " + message }));
   }
+
+  return activeClientId;
 }
