@@ -339,7 +339,7 @@ Exact JSON sent on save and received on load.
 
 ## 4. CAN Frame Parser Config
 
-> **Current state:** `GET /api/frame-parser` is called on app mount and stored in editor state. `POST /api/frame-parser` code exists in `layoutIO.ts` but is not yet wired to a UI action. These configs should ultimately live in the cloud DB, keyed by user/team, and be pushed down to the Pi when it connects.
+> **Current state:** `GET /api/frame-parser` is called on app mount and stored in editor state. `POST /api/frame-parser` is now wired — the frontend calls it on frame create, signal add/remove, byte-map clicks, and input blur. These configs should ultimately live in the cloud DB, keyed by user/team, and be pushed down to the Pi when it connects.
 
 ### 4.1 Get Full Frame Config
 
@@ -383,6 +383,8 @@ GET /api/frame-parser
 ---
 
 ### 4.2 Add / Update a CAN Frame Definition
+
+> **Bug fixed (2026-03-18):** The backend controller was reading `req.params.can_id` / `req.params.frameDef` instead of `req.body`. Because the route has no path params, both were always `undefined` and the frame was never saved. Fixed to read `{ can_id, frameDefinition }` from `req.body`.
 
 ```
 POST /api/frame-parser
@@ -542,8 +544,10 @@ Historical session data (for post-race analysis) is written to the cloud DB by t
 ### 7.1 Frontend WebSocket
 
 ```
-WS /api/telemetry/live
+WS /ws/client
 ```
+
+> **Note:** The actual backend WebSocket path is `/ws/client`. A separate `WS /api/logs/live` endpoint for the log terminal is planned but not yet implemented on either side.
 
 **Server → client message** (sent on each update cycle)
 ```json
@@ -721,23 +725,50 @@ type FrameParserConfig = Record<string, FrameDefinition>;
 
 ## 10. Implementation Status Summary
 
-| # | Endpoint | Method | Status | Priority |
-|---|---|---|---|---|
-| 1 | `/api/auth/google` | POST | Not implemented | High |
-| 2 | `/api/auth/logout` | POST | Not implemented | High |
-| 3 | `/api/auth/me` | GET | Not implemented | Medium |
-| 4 | `/api/pi/connect` | POST | Not implemented | High |
-| 5 | `/api/pi/status` | GET | Not implemented | High |
-| 6 | `/api/graphics/screens` | GET | **Implemented** | — |
-| 7 | `/api/graphics/screens/:name` | GET | **Implemented** | — |
-| 8 | `/api/graphics/screens/:name` | POST | **Implemented** | — |
-| 9 | `/api/graphics/screens/:name` | DELETE | **Implemented** | — |
-| 10 | `/api/frame-parser` | GET | **Implemented** | — |
-| 11 | `/api/frame-parser` | POST | Partial — code ready, no UI trigger | Medium |
-| 12 | `/api/dbc` | POST | **Implemented** | — |
-| 13 | `/api/driver-display` | POST | Not implemented | Medium |
-| 14 | `/api/driver-display` | GET | Not implemented | Medium |
-| 15 | `WS /api/telemetry/live` | WebSocket | Not implemented | High |
-| 16 | `/api/telemetry/snapshot` | GET (fallback) | Not implemented | Medium |
-| 17 | `WS /api/logs/live` | WebSocket | Not implemented | High |
-| 18 | `/api/logs/history` | GET | Not implemented | Low |
+| # | Endpoint | Method | Backend | Frontend | Contract | Notes |
+|---|---|---|---|---|---|---|
+| 1 | `/api/auth/google` | POST | ✗ | ✗ mocked | — | Planned |
+| 2 | `/api/auth/logout` | POST | ✗ | ✗ mocked | — | Planned |
+| 3 | `/api/auth/me` | GET | ✗ | ✗ mocked | — | Planned |
+| 4 | `/api/pi/connect` | POST | ✗ | ✗ mocked | — | Planned |
+| 5 | `/api/pi/status` | GET | ✗ | ✗ mocked | — | Planned |
+| 6 | `/api/graphics/screens` | GET | ✓ | ✓ | ✓ | Working |
+| 7 | `/api/graphics/screens/:name` | GET | ✓ | ✓ | ✓ | Working |
+| 8 | `/api/graphics/screens/:name` | POST | ✓ | ✓ | ✓ | Working |
+| 9 | `/api/graphics/screens/:name` | DELETE | ✓ | ✓ | ✓ | Working |
+| 10 | `/api/frame-parser` | GET | ✓ | ✓ | ✓ | Working |
+| 11 | `/api/frame-parser` | POST | ✓ | ✓ | ✓ | Fixed: req.params bug + frontend wired |
+| 12 | `/api/dbc` | GET | ✓ | ✗ | ✓ | No frontend use case yet |
+| 13 | `/api/dbc` | POST | ✓ | ✓ called | ✗ | Contract inverted — backend partner |
+| 14 | `/api/driver-display` | GET | ✗ | ✗ | — | Deferred |
+| 15 | `/api/driver-display` | POST | ✗ | ✗ | — | Deferred |
+| 16 | `WS /ws/client` | WS | ✓ stub | ✗ mocked | — | Path is `/ws/client`, not `/api/telemetry/live` |
+| 17 | `WS /api/logs/live` | WS | ✗ | ✗ mocked | — | Planned |
+| 18 | `/api/telemetry/snapshot` | GET | ✗ | ✗ | — | Planned |
+| 19 | `/api/logs/history` | GET | ✗ | ✗ | — | Planned |
+
+---
+
+### What each endpoint does
+
+| # | Endpoint | What it does | Where to find it |
+|---|---|---|---|
+| 1 | POST `/api/auth/google` | Signs in with a Google ID token, returns a session JWT | `frontend/src/` — mocked in auth state |
+| 2 | POST `/api/auth/logout` | Invalidates the session | `frontend/src/` — mocked in auth state |
+| 3 | GET `/api/auth/me` | Checks if the current token is still valid | `frontend/src/` — mocked in auth state |
+| 4 | POST `/api/pi/connect` | Registers a Pi UUID with the backend, opens the hardware WS | `frontend/src/components/Navbar.tsx` — mocked |
+| 5 | GET `/api/pi/status` | Returns whether the Pi WS is currently connected | `frontend/src/components/Navbar.tsx` — mocked |
+| 6 | GET `/api/graphics/screens` | Returns the list of saved screen names | `frontend/src/utils/layoutIO.ts:fetchScreenList` |
+| 7 | GET `/api/graphics/screens/:name` | Returns the full widget layout for one screen | `frontend/src/utils/layoutIO.ts:loadScreen` |
+| 8 | POST `/api/graphics/screens/:name` | Saves the current widget layout for one screen | `frontend/src/utils/layoutIO.ts:saveScreen` |
+| 9 | DELETE `/api/graphics/screens/:name` | Deletes a saved screen | `frontend/src/utils/layoutIO.ts:deleteScreen` |
+| 10 | GET `/api/frame-parser` | Returns all CAN frame + signal definitions | `frontend/src/utils/layoutIO.ts:fetchFrameParserConfig` |
+| 11 | POST `/api/frame-parser` | Saves one CAN frame definition | `frontend/src/utils/layoutIO.ts:saveCanFrame` |
+| 12 | GET `/api/dbc` | Returns the raw DBC file content currently on disk | `backend/src/modules/dbc/` — no frontend caller yet |
+| 13 | POST `/api/dbc` | Uploads a `.dbc` file to bulk-populate frame definitions | `frontend/src/components/` — DBC upload button; contract broken |
+| 14 | GET `/api/driver-display` | Returns which screen is set as the active driver display | Not implemented on either side |
+| 15 | POST `/api/driver-display` | Sets which screen the Pi's HDMI output should show | Not implemented on either side |
+| 16 | WS `/ws/client` | Live CAN signal stream from the Pi to the telemetry page | `frontend/src/pages/TelemetryPage.tsx` — mocked |
+| 17 | WS `/api/logs/live` | Live raw CAN frame stream to the log terminal | `frontend/src/pages/LogTerminalPage.tsx` — mocked |
+| 18 | GET `/api/telemetry/snapshot` | One-shot fetch of the latest signal values | Not implemented on either side |
+| 19 | GET `/api/logs/history` | Returns recent log entries to pre-fill the terminal on load | Not implemented on either side |
