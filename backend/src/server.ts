@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config({ path: "../.env" });
+
 import app from "./app";
 import http from "node:http";
 import { createRealtimeGateway } from "./modules/realtime/realtime.gateway";
