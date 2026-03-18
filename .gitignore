@@ -36,6 +36,7 @@ logs/
 
 # Env
 *.env
+.env.local
 
 # AI
 .claude/*
