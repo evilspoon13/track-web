@@ -742,7 +742,7 @@ type FrameParserConfig = Record<string, FrameDefinition>;
 | 13 | `/api/dbc` | POST | ✓ | ✓ called | ✗ | Contract inverted — backend partner |
 | 14 | `/api/driver-display` | GET | ✗ | ✗ | — | Deferred |
 | 15 | `/api/driver-display` | POST | ✗ | ✗ | — | Deferred |
-| 16 | `WS /ws/client` | WS | ✓ stub | ✗ mocked | — | Path is `/ws/client`, not `/api/telemetry/live` |
+| 16 | `WS /ws/client` | WS | ✓ stub | ✓ | ✓ | Wired — frontend connects, rolls signal window |
 | 17 | `WS /api/logs/live` | WS | ✗ | ✗ mocked | — | Planned |
 | 18 | `/api/telemetry/snapshot` | GET | ✗ | ✗ | — | Planned |
 | 19 | `/api/logs/history` | GET | ✗ | ✗ | — | Planned |
