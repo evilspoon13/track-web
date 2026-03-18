@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, ChevronDown, Trash2, Plus } from "lucide-react";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import type { FrameDefinition, FrameSignal, SignalType } from "../types";
+import { saveCanFrame } from "../utils/layoutIO";
 
 const SIGNAL_COLORS = [
   "bg-blue-500",
@@ -85,6 +86,7 @@ export default function CanIdConfigurator() {
       signals: [],
     };
     dispatch({ type: "ADD_CAN_FRAME", payload: { canId: newCanId.trim(), frame } });
+    saveCanFrame(newCanId.trim(), frame);
     setExpandedFrames((prev) => new Set([...prev, newCanId.trim()]));
     setNewFrameMode(false);
     setNewCanId("");
@@ -116,7 +118,9 @@ export default function CanIdConfigurator() {
     for (let i = 0; i < 8; i++) { if (!taken.has(i)) { freeByte = i; break; } }
     const newSignal: FrameSignal = { name: `SIGNAL_${frame.signals.length + 1}`, start_byte: freeByte, length: 1, type: "uint8", scale: 1, offset: 0 };
     const newIdx = frame.signals.length;
-    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals: [...frame.signals, newSignal] } } });
+    const updatedFrame = { ...frame, signals: [...frame.signals, newSignal] };
+    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: updatedFrame } });
+    saveCanFrame(canId, updatedFrame);
     setExpandedSignals((prev) => {
       const frameSet = new Set(prev[canId] ?? []);
       frameSet.add(newIdx);
@@ -130,14 +134,16 @@ export default function CanIdConfigurator() {
     const frame = frameParserConfig[canId];
     if (!frame) return;
     const signals = frame.signals.filter((_, i) => i !== signalIdx);
-    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
+    const updatedFrame = { ...frame, signals };
+    dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: updatedFrame } });
+    saveCanFrame(canId, updatedFrame);
     if (activeSignal?.canId === canId && activeSignal.signalIdx === signalIdx) {
       setActiveSignal(null);
       setByteSelection(null);
     }
   };
 
-  const handleUpdateSignal = (canId: string, signalIdx: number, updates: Partial<FrameSignal>) => {
+  const handleUpdateSignal = (canId: string, signalIdx: number, updates: Partial<FrameSignal>, persist = false) => {
     const frame = frameParserConfig[canId];
     if (!frame) return;
     const current = frame.signals[signalIdx]!;
@@ -147,6 +153,7 @@ export default function CanIdConfigurator() {
     if (wouldOverlap(frame, signalIdx, merged.start_byte, merged.length)) return;
     const signals = frame.signals.map((s, i) => (i === signalIdx ? merged : s));
     dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
+    if (persist) saveCanFrame(canId, { ...frame, signals });
   };
 
   // Called when clicking the frame-level byte map while a signal is active
@@ -165,9 +172,9 @@ export default function CanIdConfigurator() {
       // Deselect: shrink range from whichever end was clicked
       if (sig.length === 1) return; // can't shrink to 0
       if (byteIdx === sig.start_byte) {
-        handleUpdateSignal(canId, signalIdx, { start_byte: sig.start_byte + 1, length: sig.length - 1 });
+        handleUpdateSignal(canId, signalIdx, { start_byte: sig.start_byte + 1, length: sig.length - 1 }, true);
       } else if (byteIdx === sig.start_byte + sig.length - 1) {
-        handleUpdateSignal(canId, signalIdx, { length: sig.length - 1 });
+        handleUpdateSignal(canId, signalIdx, { length: sig.length - 1 }, true);
       }
       // middle byte: ignore (can't split a consecutive range)
       setByteSelection(null);
@@ -180,7 +187,7 @@ export default function CanIdConfigurator() {
     if (!isSameSelection) {
       // First click: anchor on this byte, update signal immediately
       setByteSelection({ canId, signalIdx, bytes: [byteIdx] });
-      handleUpdateSignal(canId, signalIdx, { start_byte: byteIdx, length: 1 });
+      handleUpdateSignal(canId, signalIdx, { start_byte: byteIdx, length: 1 }, true);
     } else {
       // Second+ click: extend range
       const existing = byteSelection!.bytes;
@@ -188,7 +195,7 @@ export default function CanIdConfigurator() {
       const max = Math.max(...existing, byteIdx);
       const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
       setByteSelection({ canId, signalIdx, bytes: range });
-      handleUpdateSignal(canId, signalIdx, { start_byte: min, length: max - min + 1 });
+      handleUpdateSignal(canId, signalIdx, { start_byte: min, length: max - min + 1 }, true);
     }
   };
 
@@ -301,6 +308,7 @@ export default function CanIdConfigurator() {
                     type="text"
                     value={frame.can_id_label}
                     onChange={(e) => handleUpdateLabel(canId, e.target.value)}
+                    onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                     className={fieldClass}
                   />
                 </div>
@@ -397,6 +405,7 @@ export default function CanIdConfigurator() {
                                     type="text"
                                     value={sig.name}
                                     onChange={(e) => handleUpdateSignal(canId, sigIdx, { name: e.target.value })}
+                                    onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                                     className={fieldClass}
                                   />
                                 </div>
@@ -405,6 +414,7 @@ export default function CanIdConfigurator() {
                                   <select
                                     value={sig.type}
                                     onChange={(e) => handleUpdateSignal(canId, sigIdx, { type: e.target.value as SignalType })}
+                                    onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                                     className="w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none"
                                     style={SELECT_STYLE}
                                   >
@@ -419,6 +429,7 @@ export default function CanIdConfigurator() {
                                     type="number"
                                     value={sig.scale}
                                     onChange={(e) => handleUpdateSignal(canId, sigIdx, { scale: parseFloat(e.target.value) || 1 })}
+                                    onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                                     className={fieldClass}
                                   />
                                 </div>
@@ -428,6 +439,7 @@ export default function CanIdConfigurator() {
                                     type="number"
                                     value={sig.offset}
                                     onChange={(e) => handleUpdateSignal(canId, sigIdx, { offset: parseFloat(e.target.value) || 0 })}
+                                    onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                                     className={fieldClass}
                                   />
                                 </div>
