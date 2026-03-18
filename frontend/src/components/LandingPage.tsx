@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider } from "../lib/firebase";
 import DotsBackground from "@/components/ui/dots-background";
 
 interface LandingPageProps {
@@ -11,9 +13,14 @@ const TITLE_DONE = 1.3;
 export default function LandingPage({ onLogin }: LandingPageProps) {
   const [isExiting, setIsExiting] = useState(false);
 
-  const handleLogin = () => {
-    setIsExiting(true);
-    setTimeout(onLogin, 450);
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setIsExiting(true);
+      setTimeout(onLogin, 450);
+    } catch {
+      // user closed popup or auth failed — stay on landing page
+    }
   };
 
   return (

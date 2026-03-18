@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "./lib/firebase";
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { v4 as uuidv4 } from "uuid";
 import { Settings, Wifi, LogOut } from "lucide-react";
@@ -392,15 +394,26 @@ function EditorLayout({ onLogout }: EditorLayoutProps) {
 }
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<null | object>(null);
+  const [authReady, setAuthReady] = useState(false);
 
-  if (!isLoggedIn) {
-    return <LandingPage onLogin={() => setIsLoggedIn(true)} />;
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthReady(true);
+    });
+    return unsub;
+  }, []);
+
+  if (!authReady) return null;
+
+  if (!user) {
+    return <LandingPage onLogin={() => {}} />;
   }
 
   return (
     <EditorProvider>
-      <EditorLayout onLogout={() => setIsLoggedIn(false)} />
+      <EditorLayout onLogout={() => signOut(auth)} />
     </EditorProvider>
   );
 }
