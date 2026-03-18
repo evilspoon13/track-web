@@ -19,6 +19,13 @@ const SIGNAL_TYPES: SignalType[] = [
   "uint8", "int8", "uint16", "int16", "uint32", "int32", "float", "double",
 ];
 
+const TYPE_BYTES: Record<SignalType, number> = {
+  uint8: 1, int8: 1,
+  uint16: 2, int16: 2,
+  uint32: 4, int32: 4, float: 4,
+  double: 8,
+};
+
 const SELECT_STYLE = {
   backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
   backgroundPosition: "right 0.375rem center",
@@ -151,6 +158,9 @@ export default function CanIdConfigurator() {
     merged.start_byte = Math.max(0, Math.min(7, merged.start_byte));
     merged.length = Math.max(1, Math.min(8 - merged.start_byte, merged.length));
     if (wouldOverlap(frame, signalIdx, merged.start_byte, merged.length)) return;
+    if (TYPE_BYTES[merged.type] > merged.length) {
+      merged.type = [...SIGNAL_TYPES].reverse().find((t) => TYPE_BYTES[t] <= merged.length) ?? "uint8";
+    }
     const signals = frame.signals.map((s, i) => (i === signalIdx ? merged : s));
     dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
     if (persist) saveCanFrame(canId, { ...frame, signals });
@@ -413,12 +423,12 @@ export default function CanIdConfigurator() {
                                   <label className="mb-1 block text-xs text-gray-500">Type</label>
                                   <select
                                     value={sig.type}
-                                    onChange={(e) => handleUpdateSignal(canId, sigIdx, { type: e.target.value as SignalType })}
+                                    onChange={(e) => handleUpdateSignal(canId, sigIdx, { type: e.target.value as SignalType }, true)}
                                     onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                                     className="w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none"
                                     style={SELECT_STYLE}
                                   >
-                                    {SIGNAL_TYPES.map((t) => (
+                                    {SIGNAL_TYPES.filter((t) => TYPE_BYTES[t] <= sig.length).map((t) => (
                                       <option key={t} value={t} className="bg-gray-900">{t}</option>
                                     ))}
                                   </select>
