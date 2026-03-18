@@ -1,58 +1,38 @@
 import { WebSocket, WebSocketServer } from "ws";
 import type { Server as HttpServer } from "node:http";
-import { json } from "node:stream/consumers";
+import * as RealtimeService from "./realtime.service";
 
 export function createRealtimeGateway(server: HttpServer): void {
   const wss = new WebSocketServer({ server });
 
-  let clientSockets = new Map<number, WebSocket>();
-  const piSockets = new Map<number, WebSocket>();
-  let currentPi: WebSocket | null = null;
-
   wss.on("connection", (socket: WebSocket, req) => {
     const path = req.url ?? "";
-    const id = Date.now()
+    const id = Date.now().toString();
 
     if (path === "/ws/pi") {
-      console.log("[ws] PI connected");
-      piSockets.set(id, socket);
-      currentPi = socket;
+      console.log("[ws] Pi connected");
+      RealtimeService.registerPi(id, socket);
 
       socket.on("message", (data) => {
-        const message = data.toString();
-        console.log("[ws][pi]", message);
-
-        for (const socket of clientSockets.values()) {
-            socket.send(JSON.stringify({type: "Telemetry", payload: "Test message:" + data}))
-        }
+        RealtimeService.handlePiMessage(id, data);
       });
 
       socket.on("close", () => {
-        console.log("[ws] PI disconnected");
-        piSockets.delete(id);
-        if (currentPi == piSockets.get(id)) {
-            currentPi = null;
-        }
+        console.log("[ws] Pi disconnected");
+        RealtimeService.disconnectPi(id);
       });
     }
     else if (path === "/ws/client") {
       console.log("[ws] client connected");
-
-      clientSockets.set(id, socket);
-      socket.send(JSON.stringify({ type: "status", payload: "connected" }));
+      RealtimeService.registerClient(id, socket);
 
       socket.on("message", (data) => {
-        const message = data.toString();
-        console.log("[ws][client]", message);
-
-        if(currentPi) {
-            currentPi.send(JSON.stringify({type: "config:update", payload: "New update incoming: " + data}));
-        }
+        RealtimeService.handleClientMessage(id, data);
       });
 
       socket.on("close", () => {
         console.log("[ws] client disconnected");
-        clientSockets.delete(id);
+        RealtimeService.disconnectClient(id);
       });
     }
     else {
