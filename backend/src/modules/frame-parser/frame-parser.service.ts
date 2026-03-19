@@ -1,38 +1,27 @@
+import { db } from "../../lib/firebaseAdmin";
+import { FieldValue } from "firebase-admin/firestore";
 import type { ApiMessage } from "../../common/types/api.types";
 import type { FrameDefinition, FrameParserConfig } from "./frame-parser.types";
-import { sendReloadSignal } from "../../common/system/signal.service";
-import { atomicWriteJson } from "../../common/system/json-helpers";
-import fs from "node:fs";
-import path from "node:path";
 
-const DEFAULT_CONFIG_PATH = path.resolve(__dirname, "../../../../../config/default.json");
+const col = (uid: string) =>
+  db.collection("users").doc(uid).collection("frames");
 
-export async function readConfig(): Promise<FrameParserConfig | null> {
-  try {
-    const data = await fs.promises.readFile(DEFAULT_CONFIG_PATH, "utf-8");
-
-    if (data.trim().length === 0) {
-      return null;
-    }
-
-    const currentConfig = JSON.parse(data) as FrameParserConfig;
-    return currentConfig;
-  } 
-  catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
-    }
-
-    throw err;
-  }
+export async function readConfig(uid: string): Promise<FrameParserConfig | null> {
+  const snap = await col(uid).get();
+  if (snap.empty) return null;
+  const frames: FrameParserConfig["frames"] = {};
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    frames[data.can_id as `0x${string}`] = {
+      can_id_label: data.can_id_label as string,
+      signals: data.signals as FrameDefinition["signals"],
+    };
+  });
+  return { frames };
 }
 
-export async function updateConfig(can_id: `0x${string}`, frame: FrameDefinition): Promise<ApiMessage> {
-  const config: FrameParserConfig = (await readConfig()) ?? { frames: {} };
-
-  config.frames[can_id] = frame;
-
-  await atomicWriteJson(DEFAULT_CONFIG_PATH, config);
-  // sendReloadSignal("fsae-can-parser.service");
-  return {msg: "Config Updated"};
+export async function updateConfig(uid: string, can_id: `0x${string}`, frame: FrameDefinition): Promise<ApiMessage> {
+  await col(uid).doc(can_id)
+    .set({ can_id, ...frame, updatedAt: FieldValue.serverTimestamp() });
+  return { msg: "Config Updated" };
 }

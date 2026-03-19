@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { ChevronRight, ChevronDown, Trash2, Plus } from "lucide-react";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import type { FrameDefinition, FrameSignal, SignalType } from "../types";
@@ -58,6 +58,12 @@ export default function CanIdConfigurator() {
   const [activeSignal, setActiveSignal] = useState<{ canId: string; signalIdx: number } | null>(null);
   // Tracks the in-progress byte range selection (visual only until second click)
   const [byteSelection, setByteSelection] = useState<{ canId: string; signalIdx: number; bytes: number[] } | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedSave = (canId: string, frame: FrameDefinition) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveCanFrame(canId, frame), 500);
+  };
+
   const [newFrameMode, setNewFrameMode] = useState(false);
   const [newCanId, setNewCanId] = useState("");
   const [newLabel, setNewLabel] = useState("");
@@ -163,7 +169,7 @@ export default function CanIdConfigurator() {
     }
     const signals = frame.signals.map((s, i) => (i === signalIdx ? merged : s));
     dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
-    if (persist) saveCanFrame(canId, { ...frame, signals });
+    if (persist) debouncedSave(canId, { ...frame, signals });
   };
 
   // Called when clicking the frame-level byte map while a signal is active
@@ -424,7 +430,6 @@ export default function CanIdConfigurator() {
                                   <select
                                     value={sig.type}
                                     onChange={(e) => handleUpdateSignal(canId, sigIdx, { type: e.target.value as SignalType }, true)}
-                                    onBlur={() => { const f = frameParserConfig[canId]; if (f) saveCanFrame(canId, f); }}
                                     className="w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none"
                                     style={SELECT_STYLE}
                                   >

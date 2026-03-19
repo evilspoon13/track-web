@@ -3,8 +3,6 @@ import * as graphicsController from "./graphics.controller";
 
 const router = Router();
 
-router.get("/", graphicsController.getConfig);
-
 router.get("/screens", graphicsController.getScreenNames);
 
 router.get("/screens/:screenId", graphicsController.getScreenById);

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "./lib/firebase";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "./lib/firebase";
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { v4 as uuidv4 } from "uuid";
 import { Settings, Wifi, LogOut } from "lucide-react";
@@ -394,11 +395,18 @@ function EditorLayout({ onLogout }: EditorLayoutProps) {
 }
 
 export default function App() {
-  const [user, setUser] = useState<null | object>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        await setDoc(doc(db, "users", u.uid), {
+          email: u.email,
+          displayName: u.displayName,
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+      }
       setUser(u);
       setAuthReady(true);
     });

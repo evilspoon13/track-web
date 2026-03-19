@@ -1,84 +1,32 @@
+import { db } from "../../lib/firebaseAdmin";
+import { FieldValue } from "firebase-admin/firestore";
 import type { ApiMessage } from "../../common/types/api.types";
-import type { ScreenInfo, GraphicsConfig } from "./graphics.types";
-import { sendReloadSignal } from "../../common/system/signal.service";
-import { atomicWriteJson } from "../../common/system/json-helpers";
-import fs from "node:fs";
-import path from "node:path";
+import type { ScreenInfo } from "./graphics.types";
 
+const col = (uid: string) =>
+  db.collection("users").doc(uid).collection("screens");
 
-const DEFAULT_CONFIG_PATH = path.resolve(__dirname, "../../../../../config/graphics.json");
-
-export async function readConfig(): Promise<GraphicsConfig | null> {
-  try {
-    const data = await fs.promises.readFile(DEFAULT_CONFIG_PATH, "utf-8");
-
-    if (data.trim().length === 0) {
-      return null;
-    }
-
-    const currentConfig = JSON.parse(data) as GraphicsConfig;
-    return currentConfig;
-  } 
-  catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
-    }
-
-    throw err;
-  }
+export async function getScreenNames(uid: string): Promise<string[] | null> {
+  const snap = await col(uid).select("name").get();
+  if (snap.empty) return null;
+  return snap.docs.map((d) => d.data().name as string);
 }
 
-export async function getScreenNames(): Promise<string[] | null> {
-  const config: GraphicsConfig | null = await readConfig();
-  if (config === null || config.screens === null) {
-    return null;
-  }
-
-  let screenNames: string[] = config.screens!.map((screen) => screen.name);
-
-  return screenNames;
+export async function getScreenById(uid: string, name: string): Promise<ScreenInfo | null> {
+  const snap = await col(uid).where("name", "==", name).limit(1).get();
+  if (snap.empty) return null;
+  return snap.docs[0]!.data() as ScreenInfo;
 }
 
-export async function getScreenById(screen: string): Promise<ScreenInfo | null> {
-  const config: GraphicsConfig | null = await readConfig();
-  if (config === null) {
-    return null;
-  }
-
-  const matchedScreen = config.screens.find((currScreen) => currScreen.name === screen);
-  return matchedScreen ?? null;
+export async function saveScreen(uid: string, screenId: string, screen: ScreenInfo): Promise<ApiMessage> {
+  await col(uid).doc(encodeURIComponent(screenId))
+    .set({ ...screen, updatedAt: FieldValue.serverTimestamp() });
+  return { msg: "Config Updated" };
 }
 
-export async function deleteScreenById(screen: string): Promise<ApiMessage> {
-  const config: GraphicsConfig | null = await readConfig();
-  if (config === null) {
-    return {msg: "fail"};
-  }
-
-  const screenIdx = config.screens.findIndex((currScreen) => currScreen.name === screen);
-  if (screenIdx == -1){
-    return {msg: "fail"};
-  }
-  config.screens.splice(screenIdx, 1);
-
-  await atomicWriteJson(DEFAULT_CONFIG_PATH, config);
-  return {msg: "Screen Deleted"};
-}
-
-// Writes Graphics Config to shared memory
-export async function saveScreen( screenId:string, newScreen: ScreenInfo): Promise<ApiMessage> {
-  let config: GraphicsConfig = (await readConfig()) ?? {screens : []};
-
-  const idx = config.screens.findIndex((screen) => screen.name == screenId);
-  
-  if (idx >= 0) {
-    config.screens[idx] = newScreen;
-  }
-  else {
-    config.screens.push(newScreen);
-  }
-
-  await atomicWriteJson(DEFAULT_CONFIG_PATH, config);
-  // sendReloadSignal("fsae-graphics.service");
-  return {msg: "Config Updated"};
+export async function deleteScreenById(uid: string, name: string): Promise<ApiMessage> {
+  const snap = await col(uid).where("name", "==", name).limit(1).get();
+  if (snap.empty) return { msg: "fail" };
+  await snap.docs[0]!.ref.delete();
+  return { msg: "Screen Deleted" };
 }

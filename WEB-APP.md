@@ -54,6 +54,13 @@ VITE_FIREBASE_APP_ID=
 FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
+
+# Emulator (local dev — routes backend and frontend SDK to local emulator)
+FIRESTORE_EMULATOR_HOST=localhost:8080
+FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+
+# Backend port — defaults to 3000 if unset. Change if 3000 is taken on your machine.
+PORT=
 ```
 
 The `VITE_*` vars are baked into the frontend bundle at build time. The `FIREBASE_*` vars are read by the backend at runtime.
@@ -89,10 +96,10 @@ Emulator endpoints:
 
 ```bash
 # From track-web/backend/
-FIRESTORE_EMULATOR_HOST=localhost:8080 npm run dev
+npm run dev
 ```
 
-Backend runs on `http://localhost:3000`. The `FIRESTORE_EMULATOR_HOST` env var redirects all Admin SDK calls to the local emulator automatically.
+Backend runs on `http://localhost:3000` by default. Set `PORT` in `.env` to use a different port (e.g. if 3000 is taken). `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` are loaded from `.env` automatically via dotenv — no shell prefix needed.
 
 ### 4. Start the frontend
 
