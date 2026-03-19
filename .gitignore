@@ -38,6 +38,10 @@ logs/
 *.env
 .env.local
 
+# Firebase
+.firebaserc
+emulator-data/
+
 # AI
 .claude/*
 CLAUDE.md
