@@ -10,10 +10,17 @@ interface LandingPageProps {
 const LETTERS = "T.R.A.C.K.".split("");
 const TITLE_DONE = 1.3;
 
+const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
+
 export default function LandingPage({ onLogin }: LandingPageProps) {
   const [isExiting, setIsExiting] = useState(false);
 
   const handleLogin = async () => {
+    if (!AUTH_ENABLED) {
+      setIsExiting(true);
+      setTimeout(onLogin, 450);
+      return;
+    }
     try {
       await signInWithPopup(auth, googleProvider);
       setIsExiting(true);
@@ -93,8 +100,14 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
             opacity: 0,
           }}
         >
-          <GoogleIcon />
-          Sign in with Google
+          {AUTH_ENABLED ? (
+            <>
+              <GoogleIcon />
+              Sign in with Google
+            </>
+          ) : (
+            "Enter"
+          )}
         </button>
       </div>
 

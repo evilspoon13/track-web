@@ -314,13 +314,15 @@ function EditorLayout({ onLogout }: EditorLayoutProps) {
                     Connect to Pi
                   </button>
                   <div className="border-t border-gray-800" />
-                  <button
-                    onClick={() => { onLogout(); setSettingsOpen(false); }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 rounded-b-lg"
-                  >
-                    <LogOut size={13} />
-                    Logout
-                  </button>
+                  {import.meta.env.VITE_AUTH_ENABLED !== "false" && (
+                    <button
+                      onClick={() => { onLogout(); setSettingsOpen(false); }}
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 rounded-b-lg"
+                    >
+                      <LogOut size={13} />
+                      Logout
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -394,7 +396,9 @@ function EditorLayout({ onLogout }: EditorLayoutProps) {
   );
 }
 
-export default function App() {
+const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
+
+function AppWithAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -424,4 +428,22 @@ export default function App() {
       <EditorLayout onLogout={() => signOut(auth)} />
     </EditorProvider>
   );
+}
+
+function AppNoAuth() {
+  const [entered, setEntered] = useState(false);
+
+  if (!entered) {
+    return <LandingPage onLogin={() => setEntered(true)} />;
+  }
+
+  return (
+    <EditorProvider>
+      <EditorLayout onLogout={() => {}} />
+    </EditorProvider>
+  );
+}
+
+export default function App() {
+  return AUTH_ENABLED ? <AppWithAuth /> : <AppNoAuth />;
 }
