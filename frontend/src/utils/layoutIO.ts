@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { auth } from "../lib/firebase";
 import type {
   SavedLayout,
   PlacedWidget,
@@ -32,6 +31,10 @@ interface BackendScreenInfo {
 }
 
 async function authFetch(input: string, init?: RequestInit): Promise<Response> {
+  if (import.meta.env.VITE_AUTH_ENABLED === "false") {
+    return fetch(input, init);
+  }
+  const { auth } = await import("../lib/firebase");
   const token = await auth.currentUser?.getIdToken();
   return fetch(input, {
     ...init,

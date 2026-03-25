@@ -35,8 +35,9 @@ logs/
 *-backups/
 
 # Env
-*.env
-.env.local
+.env
+.env.*
+!.env.example
 
 # Firebase
 .firebaserc
