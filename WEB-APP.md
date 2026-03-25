@@ -10,199 +10,127 @@ Telemetry Rendering And Capture Kit — web configurator for building and managi
 track-web/
   frontend/     React 18 + Vite + TypeScript — dashboard configurator UI
   backend/      Express 5 + TypeScript — config REST API
-  config/       graphics.json, default.json — shared config files (read by Pi)
   docker-compose.yml
+  Dockerfile.emulator
 ```
 
-The frontend is a drag-and-drop dashboard editor. Users build screen layouts (widgets on a 10×6 grid) and save them. The backend exposes a REST API that reads/writes config files consumed by the on-car graphics engine.
-
-Firebase handles auth (Google sign-in) and Firestore stores all user config in the cloud.
+The frontend is a drag-and-drop dashboard editor. Users build screen layouts (widgets on a 10×6 grid) and save them. The backend exposes a REST API backed by Firestore. Firebase handles auth (Google sign-in) and Firestore stores all user config.
 
 ---
 
 ## Tech stack
 
-| Layer      | Technology                  |
-|------------|-----------------------------|
-| Frontend   | React 18, Vite 6, TypeScript, Tailwind CSS 3 |
-| Drag & drop | @dnd-kit/core              |
-| Backend    | Express 5, TypeScript, Node.js 20 |
-| Auth       | Firebase Auth (Google provider) |
-| Database   | Firestore (per-user subcollections) |
-| Container  | Docker + Docker Compose     |
+| Layer       | Technology                                    |
+|-------------|-----------------------------------------------|
+| Frontend    | React 18, Vite 6, TypeScript, Tailwind CSS 3  |
+| Drag & drop | @dnd-kit/core                                 |
+| Backend     | Express 5, TypeScript, Node.js 20             |
+| Auth        | Firebase Auth (Google provider)               |
+| Database    | Firestore (per-user subcollections)           |
+| Container   | Docker + Docker Compose + nginx               |
 
 ---
 
 ## Environment variables
 
-Copy `.env.example` to `.env` at the repo root and fill in your values:
-
 ```bash
 cp .env.example .env
 ```
 
-```
-# Firebase (frontend — from Firebase Console → Project Settings → Your apps → SDK snippet)
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+| Variable | Used by | Notes |
+|---|---|---|
+| `VITE_FIREBASE_*` | Frontend | Baked in at build time. From Firebase Console → Project Settings → SDK snippet. |
+| `FIREBASE_PROJECT_ID` | Backend | Always required. |
+| `FIREBASE_CLIENT_EMAIL` | Backend | Service account — from Firebase Console → Service Accounts. |
+| `FIREBASE_PRIVATE_KEY` | Backend | Service account private key. |
+| `VITE_AUTH_ENABLED` | Frontend | Set to `false` to skip login (UI-only dev). Docker hardcodes this to `true`. |
+| `PORT` | Backend | Defaults to `3000`. Change if port is taken. |
 
-# Firebase Admin (backend — leave empty locally, use ADC instead)
-FIREBASE_PROJECT_ID=
-FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY=
-
-# Emulator (local dev — routes backend and frontend SDK to local emulator)
-FIRESTORE_EMULATOR_HOST=localhost:8080
-FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
-
-# Backend port — defaults to 3000 if unset. Change if 3000 is taken on your machine.
-PORT=
-```
-
-The `VITE_*` vars are baked into the frontend bundle at build time. The `FIREBASE_*` vars are read by the backend at runtime.
+Docker compose overrides emulator networking automatically. Production should never have emulator vars set.
 
 ---
 
-## Running locally — npm (recommended for development)
+## Running locally — npm
 
-This method gives you hot reload on both frontend and backend. Use it alongside the Firestore emulator so local changes never touch the cloud database.
+Three terminals, hot reload on all services.
 
-### 1. Install dependencies
-
+**Terminal 1 — Firebase emulator** (from `track-web/`):
 ```bash
-cd frontend && npm install
-cd ../backend && npm install
-```
-
-### 2. Start the Firestore emulator
-
-Requires Firebase CLI (`npm install -g firebase-tools`) and a one-time `firebase init emulators` (see [Firestore emulator setup](#firestore-emulator-setup)).
-
-```bash
-# From track-web/
 firebase emulators:start
 ```
+Firestore: `localhost:8080` · Auth: `localhost:9099` · UI: `localhost:4000`
 
-Emulator endpoints:
-- Firestore: `http://localhost:8080`
-- Auth:      `http://localhost:9099`
-- UI:        `http://localhost:4000`
-
-### 3. Start the backend
-
+**Terminal 2 — Backend** (from `track-web/backend/`):
 ```bash
-# From track-web/backend/
 npm run dev
 ```
+Runs on `localhost:3000`. Emulator hosts are set automatically via the dev script.
 
-Backend runs on `http://localhost:3000` by default. Set `PORT` in `.env` to use a different port (e.g. if 3000 is taken). `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` are loaded from `.env` automatically via dotenv — no shell prefix needed.
-
-### 4. Start the frontend
-
+**Terminal 3 — Frontend** (from `track-web/frontend/`):
 ```bash
-# From track-web/frontend/
 npm run dev
 ```
+Runs on `localhost:5173`. Vite DEV mode auto-connects to the local emulators.
 
-Frontend runs on `http://localhost:5173`. When `import.meta.env.DEV` is true, the Firebase client SDK connects to the local Auth and Firestore emulators instead of the cloud.
+> To work on UI only (no backend or emulator needed), set `VITE_AUTH_ENABLED=false` in `.env`.
 
 ---
 
 ## Running locally — Docker
 
-Use Docker when you want to test the production build (compiled frontend served by nginx, compiled backend running as a Node process). The Firestore emulator is not wired into the Docker setup — Docker targets production-like builds that hit the real Firebase.
-
-### Prerequisites
-
-- Docker and Docker Compose installed
-- `.env` filled in with real Firebase credentials (see [Environment variables](#environment-variables))
-
-### Start all services
+Single command, production build served by nginx, emulator included.
 
 ```bash
 # From track-web/
 docker compose up --build
 ```
 
-Services:
-- Frontend: `http://localhost:80` (nginx serving the Vite build)
-- Backend:  `http://localhost:3000`
+| Service | URL |
+|---|---|
+| Frontend | `http://localhost` |
+| Backend | `http://localhost:3000` |
+| Emulator UI | `http://localhost:4000` |
 
-### Stop
-
-```bash
-docker compose down
-```
-
-### Rebuild after code changes
-
-```bash
-docker compose up --build
-```
-
-### Docker internals
-
-**Frontend** (`frontend/Dockerfile`): two-stage build — Node 20 builds the Vite bundle, nginx:alpine serves the static output.
-
-**Backend** (`backend/Dockerfile`): two-stage build — Node 20 compiles TypeScript, a clean Node 20 image runs `dist/server.js`.
-
-Note: the `config/` volume is mounted into the backend container so it can read/write `graphics.json` and `default.json`.
+Emulator state is ephemeral — resets on each `docker compose up`. Stop with `docker compose down`.
 
 ---
 
-## Firestore emulator setup
+## Production — WIP
 
-One-time initialization (run from `track-web/`):
+Target: frontend on Firebase Hosting / Vercel, backend on Cloud Run / Fly.io.
 
-```bash
-npm install -g firebase-tools
-firebase login
-firebase init emulators
-# Select: Firestore, Authentication
-# Ports: Firestore 8080, Auth 9099, UI 4000
-```
-
-This creates `firebase.json` (commit this) and `.firebaserc` (do not commit).
-
-**Persist data between runs:**
-```bash
-# Export
-firebase emulators:export ./emulator-data
-
-# Import on next start
-firebase emulators:start --import=./emulator-data
-```
-
-`emulator-data/` is gitignored.
+See `.claude/plans/production-prep.md` for the full checklist.
 
 ---
 
 ## API surface
 
-| Method | Path                              | Description                      |
-|--------|-----------------------------------|----------------------------------|
-| GET    | /api/graphics/screens             | List screen names                |
-| GET    | /api/graphics/screens/:screenId   | Get a single screen config       |
-| POST   | /api/graphics/screens/:screenId   | Upsert a screen config           |
-| DELETE | /api/graphics/screens/:screenId   | Delete a screen                  |
-| GET    | /api/frame-parser                 | Read CAN frame parser config     |
-| POST   | /api/frame-parser                 | Upsert a frame definition        |
-| GET    | /api/dbc                          | Read current DBC                 |
-| POST   | /api/dbc                          | Write new DBC + signal can-reader |
+All `/api/*` routes require `Authorization: Bearer <Firebase ID token>`.
 
-All `/api/*` routes require a valid Firebase ID token in `Authorization: Bearer <token>`.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/graphics/screens` | List screen names |
+| GET | `/api/graphics/screens/:screenId` | Get a single screen config |
+| POST | `/api/graphics/screens/:screenId` | Upsert a screen config |
+| DELETE | `/api/graphics/screens/:screenId` | Delete a screen |
+| GET | `/api/frame-parser` | Read CAN frame definitions |
+| POST | `/api/frame-parser` | Upsert a frame definition |
+| GET | `/api/dbc` | Read current DBC |
+| POST | `/api/dbc` | Write new DBC + signal can-reader |
+
+---
+
+## WebSocket
+
+| Path | Description |
+|---|---|
+| `ws://localhost/ws/client` | Real-time updates from backend to frontend |
+
+Proxied through nginx in Docker. In npm dev, Vite proxies `/ws` to the backend directly.
 
 ---
 
 ## Firestore data model
-
-See `.claude/plans/firestore-data-model.md` for the full schema, security rules, and implementation plan.
-
-Quick reference:
 
 ```
 users/{uid}
