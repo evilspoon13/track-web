@@ -29,6 +29,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+backend/data/
 
 # KiCad
 *.bak
