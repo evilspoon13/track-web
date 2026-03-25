@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "../lib/firebase";
 import DotsBackground from "@/components/ui/dots-background";
 
 interface LandingPageProps {
@@ -22,6 +20,8 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
       return;
     }
     try {
+      const { signInWithPopup } = await import("firebase/auth");
+      const { auth, googleProvider } = await import("../lib/firebase");
       await signInWithPopup(auth, googleProvider);
       setIsExiting(true);
       setTimeout(onLogin, 450);
