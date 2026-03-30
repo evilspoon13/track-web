@@ -1,357 +1,396 @@
 import { useState, useEffect } from "react";
+import { auth } from "../lib/firebase";
+import { useEditorState } from "../state/EditorContext";
+import type { FrameParserConfig, PlacedWidget, ScreenState } from "../types";
 
-// ─── Fake time-series (30 samples ≈ last 30 s) ───────────────────────────────
+const MAX_HISTORY = 30;
 
-const INITIAL_SERIES: Record<string, number[]> = {
-  rpm:   [5980,6120,6380,6520,6480,6620,6750,6420,6380,6450,6510,6580,6420,6350,6480,6590,6680,6420,6380,6510,6620,6750,6800,6680,6590,6420,6380,6450,6420,6420],
-  spd:   [88,90,93,96,98,100,102,99,97,95,96,98,100,102,104,101,99,98,99,100,102,104,106,105,103,101,100,99,98,98],
-  thr:   [72,78,82,85,88,90,87,84,82,85,88,90,87,85,88,90,92,87,85,88,90,87,85,88,90,87,85,88,87,87],
-  brk:   [0,0,5,18,32,40,34,20,5,0,0,8,22,38,45,34,18,6,0,0,0,12,28,40,42,34,20,8,0,34],
-  mtmp:  [68,69,69,70,70,71,71,71,72,72,72,72,72,73,73,73,72,72,72,72,72,73,73,72,72,72,72,72,72,72],
-  itmp:  [64,64,65,65,66,66,67,67,67,68,68,68,68,68,68,68,68,69,69,68,68,68,68,68,68,68,68,68,68,68],
-  pvolt: [393,392.8,392.6,392.4,392.2,392.0,391.8,392.0,392.2,392.4,392.6,392.8,393.0,392.8,392.6,392.4,392.2,392.0,391.8,392.0,392.2,392.4,392.6,392.4,392.2,392.0,392.2,392.4,392.4,392.4],
-  soc:   [75,75,75,74,74,74,74,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73],
-  latg:  [0.2,0.4,0.8,1.2,1.6,1.8,1.9,1.8,1.6,1.2,0.8,0.4,0.0,-0.4,-0.8,-1.2,-1.6,-1.8,-1.6,-1.2,-0.8,-0.4,0.0,0.4,0.8,1.2,1.6,1.8,1.9,1.8],
-  long:  [-0.2,-0.1,0.0,0.1,0.2,0.3,0.2,0.1,0.0,-0.1,-0.3,-0.5,-0.8,-1.0,-0.8,-0.5,-0.3,-0.1,0.0,0.1,0.2,0.3,0.2,0.1,0.0,-0.2,-0.4,-0.6,-0.4,-0.4],
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Cell definitions ─────────────────────────────────────────────────────────
-
-type CellType = "graph" | "laptime" | "gps" | "gforce";
-
-interface Cell {
-  id: string;
-  type: CellType;
-  label: string;
-  unit?: string;
-  seriesKey?: string;
-  yMin?: number;
-  yMax?: number;
-  warn?: number;
-  crit?: number;
-  colSpan?: number;
+function getSignalMeta(key: string, fpc: FrameParserConfig) {
+  const colonIdx = key.indexOf(":");
+  const canIdHex = "0x" + parseInt(key.slice(0, colonIdx), 10).toString(16);
+  const signalName = key.slice(colonIdx + 1);
+  const frame = fpc[canIdHex];
+  return { frameLabel: frame?.can_id_label ?? canIdHex, signalName, canIdHex };
 }
 
-const CELLS: Cell[] = [
-  // Row 1 — powertrain
-  { id: "rpm",   type: "graph",   label: "MOTOR RPM",       unit: "rpm", seriesKey: "rpm",   yMin: 0,   yMax: 8000 },
-  { id: "spd",   type: "graph",   label: "VEHICLE SPEED",   unit: "km/h",seriesKey: "spd",   yMin: 0,   yMax: 160  },
-  { id: "thr",   type: "graph",   label: "THROTTLE POS",    unit: "%",   seriesKey: "thr",   yMin: 0,   yMax: 100  },
-  { id: "brk",   type: "graph",   label: "BRAKE PRESSURE",  unit: "bar", seriesKey: "brk",   yMin: 0,   yMax: 80   },
-  // Row 2 — thermal / electrical
-  { id: "mtmp",  type: "graph",   label: "MOTOR TEMP",      unit: "°C",  seriesKey: "mtmp",  yMin: 60,  yMax: 120, warn: 90,  crit: 110 },
-  { id: "itmp",  type: "graph",   label: "INVERTER TEMP",   unit: "°C",  seriesKey: "itmp",  yMin: 55,  yMax: 100, warn: 80,  crit: 95  },
-  { id: "pvolt", type: "graph",   label: "PACK VOLTAGE",    unit: "V",   seriesKey: "pvolt", yMin: 380, yMax: 400  },
-  { id: "soc",   type: "graph",   label: "STATE OF CHARGE", unit: "%",   seriesKey: "soc",   yMin: 0,   yMax: 100  },
-  // Row 3 — map / dynamics / timing
-  { id: "gps",    type: "gps",    label: "GPS POSITION",    colSpan: 2   },
-  { id: "gforce", type: "gforce", label: "G-FORCE"                       },
-  { id: "lap",    type: "laptime",label: "LAP TIME"                      },
-];
-
-// ─── SVG components ───────────────────────────────────────────────────────────
-
-function LineGraph({ id, values, yMin, yMax, warn, crit }: {
-  id: string; values: number[]; yMin: number; yMax: number;
-  warn?: number; crit?: number;
-}) {
-  const W = 300;
-  const H = 60;
-  const range = yMax - yMin || 1;
-  const lastVal = values[values.length - 1] ?? 0;
-
-  const lineColor =
-    crit && lastVal >= crit ? "#f87171" :
-    warn && lastVal >= warn ? "#fbbf24" : "#6b7280";
-
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    const y = H - ((v - yMin) / range) * H;
-    return [x, y] as [number, number];
-  });
-
-  const polyline = pts.map(([x, y]) => `${x},${y}`).join(" ");
-  const first = pts[0] ?? [0, H];
-  const last  = pts[pts.length - 1] ?? [W, H];
-  const fillPath = `M${first[0]},${first[1]} ${pts.map(([x,y])=>`L${x},${y}`).join(" ")} L${last[0]},${H} L${first[0]},${H} Z`;
-  const warnY = warn !== undefined ? H - ((warn - yMin) / range) * H : null;
-  const critY = crit !== undefined ? H - ((crit - yMin) / range) * H : null;
-  const gradId = `fill-${id}`;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={lineColor} stopOpacity="0.2" />
-          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {yMin < 0 && (
-        <line x1={0} y1={H - ((-yMin) / range) * H} x2={W} y2={H - ((-yMin) / range) * H}
-          stroke="#374151" strokeWidth="0.75" />
-      )}
-      {warnY !== null && (
-        <line x1={0} y1={warnY} x2={W} y2={warnY}
-          stroke="#fbbf24" strokeWidth="0.75" strokeDasharray="4,3" />
-      )}
-      {critY !== null && (
-        <line x1={0} y1={critY} x2={W} y2={critY}
-          stroke="#f87171" strokeWidth="0.75" strokeDasharray="4,3" />
-      )}
-      <path d={fillPath} fill={`url(#${gradId})`} />
-      <polyline points={polyline} fill="none" stroke={lineColor}
-        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={last[0]} cy={last[1]} r={2.5} fill={lineColor} />
-    </svg>
+function getWidgetForSignal(
+  canIdHex: string,
+  signalName: string,
+  screens: ScreenState[],
+  driverDisplayScreen: string | null
+): PlacedWidget | undefined {
+  const screen = screens.find((s) => s.name === driverDisplayScreen);
+  return screen?.widgets.find(
+    (w) => w.widgetCanId === canIdHex && w.widgetSignal === signalName
   );
 }
 
-// Fake FSAE-style track outline + car position
-function TrackMap() {
-  // Track outer path (simplified FSAE autocross-style circuit)
-  const outer = "M 55,18 L 225,18 Q 258,18 258,48 L 258,70 Q 258,90 240,98 L 218,104 Q 200,110 196,128 Q 192,148 170,155 L 125,155 Q 102,155 94,138 L 90,124 Q 84,106 64,102 Q 40,97 38,74 L 38,48 Q 38,18 55,18 Z";
-  // Track inner path (inset ~16px)
-  const inner = "M 72,34 L 210,34 Q 234,34 234,56 L 234,72 Q 234,86 220,92 L 200,97 Q 182,102 178,118 Q 174,134 158,140 L 136,140 Q 118,140 112,126 L 108,114 Q 104,100 84,96 Q 66,92 66,72 L 66,56 Q 66,34 72,34 Z";
-  // Car dot position along the track (hardcoded for mockup)
-  const carX = 182;
-  const carY = 104;
-  // Ghost (previous lap) dot
-  const ghostX = 158;
-  const ghostY = 38;
-
-  return (
-    <svg viewBox="0 0 296 174" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-      {/* Track surface */}
-      <path d={outer} fill="#1c1c1c" stroke="#374151" strokeWidth="1" />
-      <path d={inner} fill="#030712" stroke="#374151" strokeWidth="1" />
-
-      {/* Start/finish line */}
-      <line x1="55" y1="18" x2="72" y2="34" stroke="#4b5563" strokeWidth="1.5" strokeDasharray="3,2" />
-
-      {/* Sector markers */}
-      <circle cx={258} cy={70} r={3} fill="none" stroke="#1d4ed8" strokeWidth="1.5" />
-      <circle cx={125} cy={155} r={3} fill="none" stroke="#1d4ed8" strokeWidth="1.5" />
-
-      {/* Ghost car (previous lap) */}
-      <circle cx={ghostX} cy={ghostY} r={5} fill="#1f2937" stroke="#374151" strokeWidth="1.5" />
-
-      {/* Car position */}
-      <circle cx={carX} cy={carY} r={6} fill="#ffffff" />
-      <circle cx={carX} cy={carY} r={10} fill="none" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.3" />
-
-      {/* GPS lock indicator */}
-      <text x="8" y="168" fill="#374151" fontSize="7" fontFamily="monospace">GPS LOCK</text>
-      <circle cx="47" cy="165" r="3" fill="#22c55e" />
-      <text x="8" y="10" fill="#374151" fontSize="7" fontFamily="monospace">FSAE TRACK — MOCKUP</text>
-    </svg>
-  );
+function valueColor(current: number | undefined, widget: PlacedWidget | undefined): string {
+  if (current === undefined) return "text-white";
+  if (widget?.widgetCriticalThreshold !== undefined && current >= widget.widgetCriticalThreshold)
+    return "text-red-400";
+  if (widget?.widgetCautionThreshold !== undefined && current >= widget.widgetCautionThreshold)
+    return "text-amber-400";
+  return "text-white";
 }
 
-// Compact G-force XY crosshair
-function GForcePlot({ latG, longG }: { latG: number; longG: number }) {
-  const range = 3;
-  const cx = 50; const cy = 50;
-  const scale = 38 / range;
-  const dotX = cx + latG * scale;
-  const dotY = cy - longG * scale;
+// ─── GraphCard ────────────────────────────────────────────────────────────────
 
-  return (
-    <svg viewBox="0 0 100 100" className="w-full h-full">
-      {[1, 2, 3].map(n => (
-        <circle key={n} cx={cx} cy={cy} r={(n / range) * 38}
-          fill="none" stroke="#1f2937" strokeWidth="0.75" />
-      ))}
-      <line x1={cx} y1={12} x2={cx} y2={88} stroke="#1f2937" strokeWidth="0.75" />
-      <line x1={12} y1={cy} x2={88} y2={cy} stroke="#1f2937" strokeWidth="0.75" />
-      <text x={cx+1} y={11} fill="#374151" fontSize="5" textAnchor="middle">+</text>
-      <text x={cx+1} y={93} fill="#374151" fontSize="5" textAnchor="middle">−</text>
-      <text x={10}   y={cy+2} fill="#374151" fontSize="5" textAnchor="middle">−</text>
-      <text x={91}   y={cy+2} fill="#374151" fontSize="5" textAnchor="middle">+</text>
-      <circle cx={dotX} cy={dotY} r={6} fill="#ffffff" fillOpacity="0.08" />
-      <circle cx={dotX} cy={dotY} r={3} fill="#ffffff" />
-    </svg>
-  );
-}
-
-// ─── Cell renderer ────────────────────────────────────────────────────────────
-
-function TelemetryCell({
-  cell,
-  seriesData,
-  currentVal,
-  latG,
-  longG,
-  lap,
+function GraphCard({
+  frameLabel,
+  signalName,
+  values,
+  widget,
 }: {
-  cell: Cell;
-  seriesData: Record<string, number[]>;
-  currentVal?: string;
-  latG?: number;
-  longG?: number;
-  lap?: { current: string; sectors: number[]; best: string };
+  frameLabel: string;
+  signalName: string;
+  values: number[];
+  widget: PlacedWidget | undefined;
 }) {
-  const numVal = parseFloat((currentVal ?? "0").replace(",", "")) || 0;
-  const valueColor =
-    cell.crit && numVal >= cell.crit ? "text-red-400" :
-    cell.warn && numVal >= cell.warn ? "text-amber-400" : "text-white";
+  const W = 240;
+  const H = 80;
+  const current = values[values.length - 1];
+  const dataMin = values.length ? Math.min(...values) : 0;
+  const dataMax = values.length ? Math.max(...values) : 1;
+  const range = dataMax - dataMin || 1;
+  const pct = (v: number) => (v - dataMin) / range;
+  const gradId = `grad-${frameLabel}-${signalName}`.replace(/\W+/g, "");
 
-  const colSpanClass = cell.colSpan === 2 ? "col-span-2" : "";
+  const pts = values.map((v, i) => ({
+    x: values.length > 1 ? (i / (values.length - 1)) * W : W / 2,
+    y: H - pct(v) * H,
+  }));
+  const polyline = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const fillPath =
+    pts.length > 1
+      ? `M${pts[0]!.x},${pts[0]!.y} ${pts.map((p) => `L${p.x},${p.y}`).join(" ")} L${pts[pts.length - 1]!.x},${H} L${pts[0]!.x},${H} Z`
+      : "";
 
-  if (cell.type === "gps") {
-    return (
-      <div className={`${colSpanClass} bg-gray-950 rounded-xl flex flex-col p-4 overflow-hidden`}>
-        <div className="flex items-center justify-between mb-2 flex-shrink-0">
-          <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">{cell.label}</span>
-          <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-            <span className="text-[10px] font-mono text-gray-600">29.7604° N  95.3698° W</span>
-          </div>
-        </div>
-        <div className="flex-1 min-h-0">
-          <TrackMap />
-        </div>
-      </div>
-    );
-  }
+  const cautionY =
+    widget?.widgetCautionThreshold !== undefined
+      ? H - pct(widget.widgetCautionThreshold) * H
+      : null;
+  const criticalY =
+    widget?.widgetCriticalThreshold !== undefined
+      ? H - pct(widget.widgetCriticalThreshold) * H
+      : null;
 
-  if (cell.type === "gforce") {
-    return (
-      <div className={`${colSpanClass} bg-gray-950 rounded-xl flex flex-col p-4 overflow-hidden`}>
-        <div className="flex items-start justify-between mb-1 flex-shrink-0">
-          <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">{cell.label}</span>
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-mono text-gray-600">
-              LAT <span className="text-gray-300">{(latG ?? 0).toFixed(2)}g</span>
-            </span>
-            <span className="text-[10px] font-mono text-gray-600">
-              LON <span className="text-gray-300">{(longG ?? 0).toFixed(2)}g</span>
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 min-h-0">
-          <GForcePlot latG={latG ?? 0} longG={longG ?? 0} />
-        </div>
-      </div>
-    );
-  }
+  const color = valueColor(current, widget);
 
-  if (cell.type === "laptime") {
-    const sectors = lap?.sectors ?? [28.1, 31.4, 24.8];
-    return (
-      <div className={`${colSpanClass} bg-gray-950 rounded-xl flex flex-col justify-between p-4`}>
-        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">{cell.label}</span>
-        <div>
-          <span className="font-mono text-3xl font-bold tabular-nums text-white leading-none">
-            {currentVal ?? "—"}
-          </span>
-          <div className="mt-3 flex flex-col gap-1 text-[10px] font-mono">
-            <div className="flex justify-between">
-              <span className="text-gray-600">SECTOR 1</span>
-              <span className="text-gray-400">{sectors[0]}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">SECTOR 2</span>
-              <span className="text-gray-400">{sectors[1]}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">SECTOR 3</span>
-              <span className="text-gray-400">{sectors[2]}</span>
-            </div>
-            <div className="mt-1 flex justify-between border-t border-gray-800 pt-1">
-              <span className="text-gray-600">BEST</span>
-              <span className="text-gray-500">{lap?.best ?? "1:22.9"}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Default: graph
   return (
-    <div className={`${colSpanClass} bg-gray-950 rounded-xl flex flex-col justify-between p-4 overflow-hidden`}>
-      <div className="flex items-start justify-between flex-shrink-0">
-        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 leading-tight">
-          {cell.label}
+    <div className="bg-gray-950 rounded-xl p-4 flex flex-col gap-3 w-full h-full">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 uppercase leading-tight">
+          {frameLabel}
+          <br />
+          {signalName}
         </span>
-        <div className="flex items-baseline gap-1 ml-2">
-          <span className={`text-xl font-bold tabular-nums leading-none ${valueColor}`}>
-            {currentVal ?? "—"}
-          </span>
-          <span className="text-[10px] text-gray-600">{cell.unit}</span>
-        </div>
+        <span className={`text-2xl font-bold tabular-nums leading-none ${color}`}>
+          {current !== undefined ? current.toFixed(2) : "—"}
+        </span>
       </div>
-      <div className="flex-1 flex flex-col justify-end min-h-0 mt-2">
-        {cell.seriesKey && (
-          <>
-            <LineGraph
-              id={cell.id}
-              values={seriesData[cell.seriesKey] ?? []}
-              yMin={cell.yMin!}
-              yMax={cell.yMax!}
-              warn={cell.warn}
-              crit={cell.crit}
-            />
-            <div className="flex justify-between mt-1">
-              <span className="text-[9px] font-mono text-gray-700">{cell.yMin}{cell.unit}</span>
-              <span className="text-[9px] font-mono text-gray-700">−30s</span>
-              <span className="text-[9px] font-mono text-gray-700">{cell.yMax}{cell.unit}</span>
-            </div>
-          </>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full flex-1" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {cautionY !== null && (
+          <line
+            x1={0} y1={cautionY} x2={W} y2={cautionY}
+            stroke="#fbbf24" strokeWidth="0.75" strokeDasharray="4,3"
+          />
         )}
+        {criticalY !== null && (
+          <line
+            x1={0} y1={criticalY} x2={W} y2={criticalY}
+            stroke="#ef4444" strokeWidth="0.75" strokeDasharray="4,3"
+          />
+        )}
+        {fillPath && <path d={fillPath} fill={`url(#${gradId})`} />}
+        {pts.length > 1 && (
+          <polyline
+            points={polyline}
+            fill="none"
+            stroke="#60a5fa"
+            strokeWidth="1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+      </svg>
+    </div>
+  );
+}
+
+// ─── NumberCard ───────────────────────────────────────────────────────────────
+
+function NumberCard({
+  frameLabel,
+  signalName,
+  values,
+  widget,
+}: {
+  frameLabel: string;
+  signalName: string;
+  values: number[];
+  widget: PlacedWidget | undefined;
+}) {
+  const current = values[values.length - 1];
+  const color = valueColor(current, widget);
+  return (
+    <div className="bg-gray-950 rounded-xl p-4 flex flex-col justify-between w-full h-full">
+      <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 uppercase">
+        {frameLabel} / {signalName}
+      </span>
+      <span className={`text-4xl font-bold tabular-nums leading-none mt-3 ${color}`}>
+        {current !== undefined ? current.toFixed(2) : "—"}
+      </span>
+    </div>
+  );
+}
+
+// ─── GaugeCard ────────────────────────────────────────────────────────────────
+
+function GaugeCard({
+  frameLabel,
+  signalName,
+  values,
+  widget,
+}: {
+  frameLabel: string;
+  signalName: string;
+  values: number[];
+  widget: PlacedWidget | undefined;
+}) {
+  const current = values[values.length - 1];
+  const min = widget?.widgetMin ?? 0;
+  const max = widget?.widgetMax ?? Math.max(...values, min + 1);
+  const pct = Math.min(1, Math.max(0, ((current ?? min) - min) / (max - min)));
+
+  const cx = 60, cy = 64, r = 44;
+  const SWEEP_DEG = 260;
+  const START_DEG = 140;
+  const circumference = 2 * Math.PI * r;
+  const trackLength = (SWEEP_DEG / 360) * circumference;
+  const fillLength = pct * trackLength;
+
+  const color = valueColor(current, widget);
+  const strokeColor =
+    widget?.widgetCriticalThreshold !== undefined && (current ?? 0) >= widget.widgetCriticalThreshold
+      ? "#ef4444"
+      : widget?.widgetCautionThreshold !== undefined && (current ?? 0) >= widget.widgetCautionThreshold
+      ? "#fbbf24"
+      : "#60a5fa";
+
+  return (
+    <div className="bg-gray-950 rounded-xl p-4 flex flex-col items-center gap-1 w-full h-full">
+      <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 uppercase self-start">
+        {frameLabel} / {signalName}
+      </span>
+      <svg viewBox="0 0 120 120" className="w-32 h-32">
+        <circle
+          cx={cx} cy={cy} r={r}
+          fill="none"
+          stroke="#1f2937"
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={`${trackLength} ${circumference}`}
+          transform={`rotate(${START_DEG} ${cx} ${cy})`}
+        />
+        <circle
+          cx={cx} cy={cy} r={r}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={`${fillLength} ${circumference}`}
+          transform={`rotate(${START_DEG} ${cx} ${cy})`}
+        />
+        <text
+          x={cx} y={cy + 6}
+          textAnchor="middle"
+          style={{ fontSize: 18, fontWeight: "bold", fill: color === "text-red-400" ? "#f87171" : color === "text-amber-400" ? "#fbbf24" : "#ffffff" }}
+        >
+          {current !== undefined ? current.toFixed(1) : "—"}
+        </text>
+        <text x={18} y={108} style={{ fontSize: 8, fill: "#374151" }}>{min}</text>
+        <text x={90} y={108} textAnchor="end" style={{ fontSize: 8, fill: "#374151" }}>{max}</text>
+      </svg>
+    </div>
+  );
+}
+
+// ─── BarCard ──────────────────────────────────────────────────────────────────
+
+function BarCard({
+  frameLabel,
+  signalName,
+  values,
+  widget,
+}: {
+  frameLabel: string;
+  signalName: string;
+  values: number[];
+  widget: PlacedWidget | undefined;
+}) {
+  const current = values[values.length - 1];
+  const min = widget?.widgetMin ?? 0;
+  const max = widget?.widgetMax ?? Math.max(...values, min + 1);
+  const pct = Math.min(1, Math.max(0, ((current ?? min) - min) / (max - min)));
+  const cautionPct =
+    widget?.widgetCautionThreshold !== undefined
+      ? (widget.widgetCautionThreshold - min) / (max - min)
+      : null;
+  const criticalPct =
+    widget?.widgetCriticalThreshold !== undefined
+      ? (widget.widgetCriticalThreshold - min) / (max - min)
+      : null;
+  const color = valueColor(current, widget);
+
+  return (
+    <div className="bg-gray-950 rounded-xl p-4 flex flex-col justify-between gap-3 w-full h-full">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 uppercase leading-tight">
+          {frameLabel}
+          <br />
+          {signalName}
+        </span>
+        <span className={`text-2xl font-bold tabular-nums leading-none ${color}`}>
+          {current !== undefined ? current.toFixed(2) : "—"}
+        </span>
+      </div>
+      <div className="relative h-2 rounded-full bg-gray-800 overflow-hidden">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-blue-400"
+          style={{ width: `${pct * 100}%` }}
+        />
+        {cautionPct !== null && (
+          <div
+            className="absolute inset-y-0 w-px bg-amber-400"
+            style={{ left: `${cautionPct * 100}%` }}
+          />
+        )}
+        {criticalPct !== null && (
+          <div
+            className="absolute inset-y-0 w-px bg-red-400"
+            style={{ left: `${criticalPct * 100}%` }}
+          />
+        )}
+      </div>
+      <div className="flex justify-between text-[9px] font-mono text-gray-700">
+        <span>{min}</span>
+        <span>{max}</span>
       </div>
     </div>
   );
 }
 
+// ─── IndicatorCard ────────────────────────────────────────────────────────────
+
+function IndicatorCard({
+  frameLabel,
+  signalName,
+  values,
+  widget,
+}: {
+  frameLabel: string;
+  signalName: string;
+  values: number[];
+  widget: PlacedWidget | undefined;
+}) {
+  const current = values[values.length - 1];
+  const color = valueColor(current, widget);
+  const dotColor =
+    color === "text-red-400"
+      ? "bg-red-500"
+      : color === "text-amber-400"
+      ? "bg-amber-400"
+      : "bg-green-500";
+
+  return (
+    <div className="bg-gray-950 rounded-xl p-4 flex items-center gap-4 w-full h-full">
+      <div className={`h-5 w-5 rounded-full flex-shrink-0 ${dotColor}`} />
+      <div className="flex flex-col">
+        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 uppercase">
+          {frameLabel}
+        </span>
+        <span className="text-sm font-mono text-gray-400">{signalName}</span>
+        <span className={`text-lg font-bold tabular-nums ${color}`}>
+          {current !== undefined ? current.toFixed(2) : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── SmartSignalCard ──────────────────────────────────────────────────────────
+
+function SmartSignalCard({
+  signalKey,
+  fpc,
+  values,
+  screens,
+  driverDisplayScreen,
+}: {
+  signalKey: string;
+  fpc: FrameParserConfig;
+  values: number[];
+  screens: ScreenState[];
+  driverDisplayScreen: string | null;
+}) {
+  const { frameLabel, signalName, canIdHex } = getSignalMeta(signalKey, fpc);
+  const widget = getWidgetForSignal(canIdHex, signalName, screens, driverDisplayScreen);
+
+  const props = { frameLabel, signalName, values, widget };
+
+  switch (widget?.type) {
+    case "gauge":     return <GaugeCard {...props} />;
+    case "bar":       return <BarCard {...props} />;
+    case "number":    return <NumberCard {...props} />;
+    case "indicator": return <IndicatorCard {...props} />;
+    default:          return <GraphCard {...props} />;
+  }
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TelemetryPage() {
-  const [series, setSeries] = useState<Record<string, number[]>>(INITIAL_SERIES);
-  const [currents, setCurrents] = useState<Record<string, string>>({
-    rpm: "6,420", spd: "98", thr: "87", brk: "34",
-    mtmp: "72", itmp: "68", pvolt: "392.4", soc: "73",
-  });
-  const [gforce, setGforce] = useState({ latG: 1.8, longG: -0.4 });
-  const [lap, setLap] = useState({ current: "1:24.3", sectors: [28.1, 31.4, 24.8], best: "1:22.9" });
+  const { frameParserConfig, screens, driverDisplayScreen } = useEditorState();
+  const [history, setHistory] = useState<Record<string, number[]>>({});
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     const ws = new WebSocket(`ws://${window.location.host}/ws/client`);
 
-    ws.onopen = () => setConnected(true);
+    ws.onopen = () => {
+      setConnected(true);
+      const uid = auth.currentUser?.uid;
+      auth.currentUser?.getIdToken().then((token) => {
+        ws.send(JSON.stringify({ type: "auth", token, client_id: uid ?? "browser" }));
+      });
+    };
+
     ws.onclose = () => setConnected(false);
 
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data as string) as { type: string; payload: string };
-        if (msg.type !== "Telemetry") return;
-        const data = JSON.parse(msg.payload) as {
-          signals?: Record<string, number>;
-          gps?: { lat: number; lon: number; lock: boolean };
-          lap?: { current: number; sectors: number[]; best: number };
+        const msg = JSON.parse(event.data as string) as {
+          type: string;
+          payload: { signals?: Record<string, number> };
         };
-
-        if (data.signals) {
-          setSeries((prev) => {
-            const next = { ...prev };
-            for (const [key, val] of Object.entries(data.signals!)) {
-              const arr = prev[key] ?? [];
-              next[key] = [...arr.slice(-29), val];
-            }
-            return next;
-          });
-          setCurrents((prev) => ({
-            ...prev,
-            ...Object.fromEntries(Object.entries(data.signals!).map(([k, v]) => [k, String(v)])),
-          }));
-          if (data.signals.latg !== undefined) setGforce((g) => ({ ...g, latG: data.signals!.latg! }));
-          if (data.signals.long !== undefined) setGforce((g) => ({ ...g, longG: data.signals!.long! }));
-        }
-        if (data.lap) setLap({
-          current: String(data.lap.current),
-          sectors: data.lap.sectors,
-          best: String(data.lap.best),
+        if (msg.type !== "Telemetry") return;
+        const signals = msg.payload?.signals ?? {};
+        setHistory((prev) => {
+          const next = { ...prev };
+          for (const [key, val] of Object.entries(signals)) {
+            const arr = prev[key] ?? [];
+            next[key] = [...arr.slice(-(MAX_HISTORY - 1)), val];
+          }
+          return next;
         });
       } catch {
         // ignore malformed messages
@@ -361,24 +400,51 @@ export default function TelemetryPage() {
     return () => ws.close();
   }, []);
 
+  const signalKeys = Object.keys(history);
+  const n = signalKeys.length;
+  const cols = n <= 1 ? 1 : n < 9 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  const remainder = n % cols;
+  const lastRowStart = remainder === 0 ? n : n - remainder;
+
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-gray-900">
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
-        <div className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-green-500" : "bg-gray-600"}`} />
-        <span className="text-[10px] font-mono text-gray-600">{connected ? "LIVE" : "NO SIGNAL"}</span>
+    <div className="flex flex-1 flex-col overflow-hidden bg-gray-900">
+      <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
+        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">LIVE TELEMETRY</span>
+        <div className="flex items-center gap-1.5">
+          <div className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-blue-400" : "bg-gray-600"}`} />
+          <span className="text-[10px] font-mono text-gray-600">{connected ? "LIVE" : "NO SIGNAL"}</span>
+        </div>
       </div>
-      <div className="absolute inset-0 grid grid-cols-4 grid-rows-3 gap-3 p-3 bg-gray-900">
-        {CELLS.map((cell) => (
-          <TelemetryCell
-            key={cell.id}
-            cell={cell}
-            seriesData={series}
-            currentVal={cell.type === "laptime" ? lap.current : currents[cell.id]}
-            latG={gforce.latG}
-            longG={gforce.longG}
-            lap={lap}
-          />
-        ))}
+      <div className="flex-1 overflow-hidden p-3">
+        {n === 0 ? (
+          <div className="flex h-full items-center justify-center text-[10px] font-mono text-gray-600">
+            waiting for telemetry...
+          </div>
+        ) : (
+          <div
+            className="grid gap-3 h-full"
+            style={{
+              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+            }}
+          >
+            {signalKeys.map((key, i) => {
+              const span = remainder === 1 && i >= lastRowStart ? cols : 1;
+              return (
+                <div key={key} className="h-full" style={span > 1 ? { gridColumn: `span ${span}` } : undefined}>
+                  <SmartSignalCard
+                    signalKey={key}
+                    fpc={frameParserConfig}
+                    values={history[key] ?? []}
+                    screens={screens}
+                    driverDisplayScreen={driverDisplayScreen}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
