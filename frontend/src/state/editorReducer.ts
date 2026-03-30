@@ -10,6 +10,7 @@ export function createInitialState(): EditorState {
     frameParserConfig: {},
     driverDisplayScreen: null,
     driverDisplayDirty: false,
+    canIdsDirty: false,
   };
 }
 
@@ -205,6 +206,7 @@ export function editorReducer(
       return {
         ...state,
         frameParserConfig: { ...state.frameParserConfig, [canId]: frame },
+        canIdsDirty: true,
       };
     }
 
@@ -213,14 +215,18 @@ export function editorReducer(
       return {
         ...state,
         frameParserConfig: { ...state.frameParserConfig, [canId]: frame },
+        canIdsDirty: true,
       };
     }
 
     case "REMOVE_CAN_FRAME": {
       const next = { ...state.frameParserConfig };
       delete next[action.payload.canId];
-      return { ...state, frameParserConfig: next };
+      return { ...state, frameParserConfig: next, canIdsDirty: true };
     }
+
+    case "MARK_CAN_IDS_CLEAN":
+      return { ...state, canIdsDirty: false };
 
     case "SET_DRIVER_DISPLAY":
       return {

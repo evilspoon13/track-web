@@ -5,7 +5,6 @@ export interface WidgetSize {
   rows: number;
 }
 
-// Mirrors frame-parser.types.ts
 export type SignalType =
   | "uint8"
   | "int8"
@@ -68,6 +67,7 @@ export interface EditorState {
   frameParserConfig: FrameParserConfig;
   driverDisplayScreen: string | null;
   driverDisplayDirty: boolean;
+  canIdsDirty: boolean;
 }
 
 export interface SavedLayout {
@@ -108,4 +108,5 @@ export type EditorAction =
   | { type: "ADD_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "UPDATE_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "REMOVE_CAN_FRAME"; payload: { canId: string } }
-  | { type: "SET_DRIVER_DISPLAY"; payload: { screenName: string | null } };
+  | { type: "SET_DRIVER_DISPLAY"; payload: { screenName: string | null } }
+  | { type: "MARK_CAN_IDS_CLEAN" };

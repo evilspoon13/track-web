@@ -1,93 +1,89 @@
+import { db } from "../../lib/firebaseAdmin";
+import { FieldValue } from "firebase-admin/firestore";
 import type { ApiMessage } from "../../common/types/api.types";
-import type { FrameParserConfig } from "./dbc.types";
-import { sendReloadSignal } from "../../common/system/signal.service";
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import type { DbcConfig, FrameDefinition, FrameSignal } from "./dbc.types";
+import { SignalType } from "./dbc.types";
+import type { Signal } from "candied/dist/dbc/Dbc";
 import { Dbc } from "candied";
 
-const dbcFile = resolve(__dirname, "../../../../database/display.dbc");
+const docRef = (uid: string) =>
+  db.collection("users").doc(uid).collection("dbc").doc("content");
 
-function getDbcVersion(dbc: Dbc): string {
-  return dbc.data.version ?? "1.0";
+function signalTypeFromCandied(sig: Signal): SignalType {
+  const dt = sig.dataType;
+  if (dt === "float") return SignalType.FLOAT;
+  if (dt === "double") return SignalType.DOUBLE;
+  if (dt === "int8") return SignalType.INT8;
+  if (dt === "int16") return SignalType.INT16;
+  if (dt === "uint8") return SignalType.UINT8;
+  if (dt === "uint16") return SignalType.UINT16;
+  if (dt === "int32" || dt === "int64") return SignalType.INT32;
+  if (dt === "uint32" || dt === "uint64") return SignalType.UINT32;
+  // fallback: derive from signed + length
+  if (sig.signed) {
+    if (sig.length <= 8) return SignalType.INT8;
+    if (sig.length <= 16) return SignalType.INT16;
+    return SignalType.INT32;
+  }
+  if (sig.length <= 8) return SignalType.UINT8;
+  if (sig.length <= 16) return SignalType.UINT16;
+  return SignalType.UINT32;
 }
 
-function bumpVersion(version: string | null | undefined): string {
-  if (!version) {
-    return "1.0.1";
-  }
-
-  const match = version.match(/^(\d+)\.(\d+)(?:\.(\d+))?$/);
-  if (!match) {
-    return `${version}.1`;
-  }
-
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3] ?? 0);
-
-  return `${major}.${minor}.${patch + 1}`;
+function parseCandiedToConfig(dbc: Dbc): DbcConfig {
+  const frames: Record<string, FrameDefinition> = {};
+  dbc.data.messages.forEach((msg) => {
+    const canIdHex = "0x" + msg.id.toString(16);
+    const signals: FrameSignal[] = [];
+    msg.signals.forEach((sig) => {
+      signals.push({
+        name: sig.name,
+        start_byte: sig.startBit,
+        length: sig.length,
+        type: signalTypeFromCandied(sig),
+        scale: sig.factor,
+        offset: sig.offset,
+      });
+    });
+    frames[canIdHex] = { can_id_label: msg.name, signals };
+  });
+  return { frames };
 }
 
-export async function readDbc(): Promise<ApiMessage> {
-  // Read current DBC
+export async function readDbc(uid: string): Promise<DbcConfig | null> {
+  const snap = await docRef(uid).get();
+  if (!snap.exists) return null;
   const dbc = new Dbc();
-  const fileContent = readFileSync(dbcFile, { encoding: "ascii" });
-  dbc.load(fileContent);
-  const json = JSON.parse(dbc.toJson());
-
-  return { msg: "Read DBC", data: json };
+  dbc.load(snap.data()!.raw as string);
+  return parseCandiedToConfig(dbc);
 }
 
-export async function writeDbc(_newDbc: FrameParserConfig): Promise<ApiMessage> {
-  // Write new dbc to shared memory
+export async function writeDbc(uid: string, config: DbcConfig): Promise<ApiMessage> {
   const dbc = new Dbc();
-  const existingContent = readFileSync(dbcFile, { encoding: "ascii" });
-  dbc.load(existingContent);
-
-  const frames = Object.values(_newDbc.frames);
-  if (!frames.length) {
-    return { msg: "Write DBC failed: no frame definitions provided" };
-  }
-
-  for (const frame of frames) {
-    const messageName = frame.can_id_label;
-    const messageId = frame.can_id;
-    const messageLength = frame.length;
-    let existingMessageName: string | undefined;
-
-    try {
-      existingMessageName = dbc.messageIdToName(messageId);
-    } catch {
-      existingMessageName = undefined;
-    }
-
-    if (existingMessageName) {
-      dbc.removeMessage(existingMessageName);
-    }
-
-    const message = dbc.createMessage(messageName, messageId, messageLength);
-    message.add().updateDescription(messageName).updateNode("Vector__XXX");
-
+  dbc.description = "DBC file";
+  for (const [canIdHex, frame] of Object.entries(config.frames)) {
+    const messageId = parseInt(canIdHex, 16);
+    const dlc = Math.max(...frame.signals.map((s) => s.start_byte + s.length), 1);
+    const message = dbc.createMessage(frame.can_id_label, messageId, dlc);
+    message.add().updateDescription(frame.can_id_label).updateNode("Vector__XXX");
     for (const signal of frame.signals) {
-      const signalType = signal.type.toLowerCase();
+      const t = signal.type.toLowerCase();
       message.addSignal(signal.name, signal.start_byte, signal.length, {
-        signed: signalType.startsWith("int"),
-        isFloat: signalType === "float" || signalType === "double",
+        signed: t.startsWith("int"),
+        isFloat: t === "float" || t === "double",
         factor: signal.scale,
         offset: signal.offset,
       });
     }
   }
-
-  const nextVersion = bumpVersion(getDbcVersion(dbc));
-  dbc.version = nextVersion;
-  dbc.description = "DBC file";
-
-  const generatedDbc = dbc.write();
-  writeFileSync(dbcFile, generatedDbc, { encoding: "ascii" });
-
-  // Signal can-reader to reload
-  // sendReloadSignal("fsae-can-reader.service");
-
+  const raw = dbc.write();
+  await docRef(uid).set({ raw, updatedAt: FieldValue.serverTimestamp() });
   return { msg: "Wrote DBC" };
+}
+
+export async function uploadDbc(uid: string, raw: string): Promise<DbcConfig> {
+  await docRef(uid).set({ raw, updatedAt: FieldValue.serverTimestamp() });
+  const dbc = new Dbc();
+  dbc.load(raw);
+  return parseCandiedToConfig(dbc);
 }
