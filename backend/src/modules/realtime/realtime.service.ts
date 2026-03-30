@@ -1,5 +1,16 @@
 import { type RawData, WebSocket } from "ws";
 import type { PiConnection, ClientConnection } from "./realtime.types";
+import { persistLogBuffer } from "../logs/logs.service";
+
+interface UploadSession {
+  deviceId: string;
+  filename: string;
+  fileSize: number;
+  chunks: Map<number, Buffer>;
+  startedAt: number;
+}
+
+const activeSessions = new Map<string, UploadSession>();
 
 let clientSockets = new Map<string, ClientConnection>();
 const piSockets = new Map<string, PiConnection>();
@@ -21,6 +32,13 @@ setInterval(() => {
         // ignore close failures
       }
       disconnectPi(piId);
+    }
+  }
+  const UPLOAD_TTL_MS = 5 * 60 * 1000;
+  for (const [key, session] of activeSessions.entries()) {
+    if (now - session.startedAt > UPLOAD_TTL_MS) {
+      console.warn(`[logs] dropping stale upload session: ${session.filename}`);
+      activeSessions.delete(key);
     }
   }
 }, PI_MONITOR_INTERVAL_MS);
@@ -151,7 +169,16 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   try {
     const parsed = JSON.parse(message);
     if (parsed && typeof parsed === "object") {
-      const obj = parsed as { type?: string; device_id?: unknown; payload?: unknown };
+      const obj = parsed as {
+        type?: string;
+        device_id?: unknown;
+        payload?: unknown;
+        filename?: unknown;
+        file_size?: unknown;
+        chunk_index?: unknown;
+        data?: unknown;
+        total_chunks?: unknown;
+      };
       if (obj.type === "heartbeat") {
         const nextPiId = normalizePiId(obj);
         if (nextPiId) {
@@ -192,6 +219,53 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         }
 
         return activePiId;
+      } else if (obj.type === "log_upload_start") {
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        const filename = obj.filename as string;
+        const fileSize = obj.file_size as number;
+        if (!filename) return activePiId;
+        activeSessions.set(filename, {
+          deviceId,
+          filename,
+          fileSize,
+          chunks: new Map(),
+          startedAt: Date.now(),
+        });
+        console.log(`[logs] upload start: ${filename} (${fileSize} bytes)`);
+      } else if (obj.type === "log_upload_chunk") {
+        const filename = obj.filename as string;
+        const chunkIndex = obj.chunk_index as number;
+        const data = obj.data as string;
+        const session = activeSessions.get(filename);
+        if (session) {
+          session.chunks.set(chunkIndex, Buffer.from(data, "base64"));
+        }
+      } else if (obj.type === "log_upload_end") {
+        const filename = obj.filename as string;
+        const totalChunks = obj.total_chunks as number;
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        const session = activeSessions.get(filename);
+        if (!session) return activePiId;
+        activeSessions.delete(filename);
+
+        if (session.chunks.size !== totalChunks) {
+          console.warn(`[logs] incomplete upload: ${filename} got ${session.chunks.size}/${totalChunks}`);
+          return activePiId;
+        }
+
+        const ordered: Buffer[] = [];
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = session.chunks.get(i);
+          if (!chunk) {
+            console.warn(`[logs] missing chunk ${i} for ${filename}`);
+            return activePiId;
+          }
+          ordered.push(chunk);
+        }
+
+        const sessionName = filename.replace(/\.bin$/, "");
+        persistLogBuffer(deviceId, sessionName, Buffer.concat(ordered)).catch(console.error);
+        console.log(`[logs] upload complete: ${filename} (${totalChunks} chunks)`);
       }
     }
   } catch {

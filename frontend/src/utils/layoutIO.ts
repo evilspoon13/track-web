@@ -29,7 +29,7 @@ interface BackendScreenInfo {
   widgets: BackendWidgetInfo[];
 }
 
-async function authFetch(input: string, init?: RequestInit): Promise<Response> {
+export async function authFetch(input: string, init?: RequestInit): Promise<Response> {
   if (import.meta.env.VITE_AUTH_ENABLED === "false") {
     return fetch(input, init);
   }

@@ -75,6 +75,19 @@ export interface SavedLayout {
   widgets: PlacedWidget[];
 }
 
+export interface LogEntry {
+  ts: number;
+  can_id: number;
+  value: number;
+  session: string;
+  frame_name: string | null;
+}
+
+export interface LogsResponse {
+  entries: LogEntry[];
+  nextCursor: number | null;
+}
+
 export type EditorAction =
   | { type: "ADD_WIDGET"; payload: PlacedWidget }
   | { type: "MOVE_WIDGET"; payload: { id: string; col: number; row: number } }
