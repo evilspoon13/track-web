@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { EditorState, EditorAction } from "../types";
 import { editorReducer, createInitialState } from "./editorReducer";
-import { getDbc } from "../utils/layoutIO";
+import { getDbc, getDriverDisplay } from "../utils/layoutIO";
 
 const EditorStateContext = createContext<EditorState | null>(null);
 const EditorDispatchContext = createContext<Dispatch<EditorAction> | null>(null);
@@ -17,9 +17,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(editorReducer, null, createInitialState);
 
   useEffect(() => {
-    getDbc().then((config) =>
-      dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config } })
-    );
+    Promise.all([getDbc(), getDriverDisplay()]).then(([config, driverDisplayScreen]) => {
+      dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config } });
+      dispatch({ type: "LOAD_DRIVER_DISPLAY", payload: { screenName: driverDisplayScreen } });
+    });
   }, []);
 
   useEffect(() => {

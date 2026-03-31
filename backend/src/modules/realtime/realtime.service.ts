@@ -274,6 +274,13 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   return activePiId;
 }
 
+export function sendConfigToPi(screenInfo: unknown): boolean {
+  if (!currentPi || currentPi.readyState !== WebSocket.OPEN) return false;
+  currentPi.send(JSON.stringify({ type: "config_update", payload: JSON.stringify(screenInfo) }));
+  console.log("[ws] sent config_update to Pi");
+  return true;
+}
+
 export function handleClientMessage(
   socket: WebSocket,
   data: RawData,
@@ -305,10 +312,6 @@ export function handleClientMessage(
     }
   } catch {
     // ignore malformed non-JSON packets
-  }
-
-  if (activeClientId && currentPi && currentPi.readyState == WebSocket.OPEN) {
-    currentPi.send(JSON.stringify({ type: "config:update", payload: "New update incoming: " + message }));
   }
 
   return activeClientId;

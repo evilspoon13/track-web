@@ -11,4 +11,7 @@ router.delete("/screens/:screenId", graphicsController.deleteScreenById);
 
 router.post("/screens/:screenId", graphicsController.updateScreen);
 
+router.get("/driver-display", graphicsController.getDriverDisplayHandler);
+router.post("/driver-display", graphicsController.setDriverDisplayHandler);
+
 export default router;

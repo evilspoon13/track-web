@@ -122,4 +122,5 @@ export type EditorAction =
   | { type: "UPDATE_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "REMOVE_CAN_FRAME"; payload: { canId: string } }
   | { type: "SET_DRIVER_DISPLAY"; payload: { screenName: string | null } }
-  | { type: "MARK_CAN_IDS_CLEAN" };
+  | { type: "MARK_CAN_IDS_CLEAN" }
+  | { type: "LOAD_DRIVER_DISPLAY"; payload: { screenName: string | null } };

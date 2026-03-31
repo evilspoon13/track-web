@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import DraggableWidget from "./DraggableWidget";
 import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
-import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc } from "../utils/layoutIO";
+import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc, setDriverDisplay } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
 import { Save, RotateCcw, X, Upload } from "lucide-react";
 
@@ -71,6 +71,7 @@ export default function Navbar() {
     });
     dispatch({ type: "MARK_CLEAN", payload: { id: activeScreen.id } });
     if (state.driverDisplayDirty) {
+      await setDriverDisplay(state.driverDisplayScreen);
       dispatch({ type: "MARK_DRIVER_DISPLAY_CLEAN" });
     }
     setSaveStatus("Saved!");
