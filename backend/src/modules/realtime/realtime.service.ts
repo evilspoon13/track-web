@@ -1,6 +1,7 @@
 import { type RawData, WebSocket } from "ws";
 import type { PiConnection, ClientConnection } from "./realtime.types";
 import { persistLogBuffer } from "../logs/logs.service";
+import { logger } from "../../common/logger";
 
 interface UploadSession {
   deviceId: string;
@@ -25,7 +26,7 @@ setInterval(() => {
   for (const [piId, connection] of piSockets.entries()) {
     const ageMs = now - connection.lastHeartbeat;
     if (ageMs > PI_DEADLINE_MS) {
-      console.log(`[ws] Pi ${piId} stale (${ageMs}ms). dropping`);
+      logger.warn("ws", "Pi stale, dropping", { piId, ageMs });
       try {
         connection.socket.close(1000, "Pi heartbeat missed");
       } catch {
@@ -37,7 +38,7 @@ setInterval(() => {
   const UPLOAD_TTL_MS = 5 * 60 * 1000;
   for (const [key, session] of activeSessions.entries()) {
     if (now - session.startedAt > UPLOAD_TTL_MS) {
-      console.warn(`[logs] dropping stale upload session: ${session.filename}`);
+      logger.warn("logs", "Dropping stale upload session", { filename: session.filename });
       activeSessions.delete(key);
     }
   }
@@ -231,7 +232,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
           chunks: new Map(),
           startedAt: Date.now(),
         });
-        console.log(`[logs] upload start: ${filename} (${fileSize} bytes)`);
+        logger.info("logs", "Upload start", { filename, fileSize, deviceId });
       } else if (obj.type === "log_upload_chunk") {
         const filename = obj.filename as string;
         const chunkIndex = obj.chunk_index as number;
@@ -249,7 +250,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         activeSessions.delete(filename);
 
         if (session.chunks.size !== totalChunks) {
-          console.warn(`[logs] incomplete upload: ${filename} got ${session.chunks.size}/${totalChunks}`);
+          logger.warn("logs", "Incomplete upload", { filename, got: session.chunks.size, expected: totalChunks });
           return activePiId;
         }
 
@@ -257,7 +258,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         for (let i = 0; i < totalChunks; i++) {
           const chunk = session.chunks.get(i);
           if (!chunk) {
-            console.warn(`[logs] missing chunk ${i} for ${filename}`);
+            logger.warn("logs", "Missing chunk", { filename, chunkIndex: i });
             return activePiId;
           }
           ordered.push(chunk);
@@ -265,7 +266,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
 
         const sessionName = filename.replace(/\.bin$/, "");
         persistLogBuffer(deviceId, sessionName, Buffer.concat(ordered)).catch(console.error);
-        console.log(`[logs] upload complete: ${filename} (${totalChunks} chunks)`);
+        logger.info("logs", "Upload complete", { filename, totalChunks });
       }
     }
   } catch {
@@ -277,7 +278,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
 export function sendConfigToPi(screenInfo: unknown): boolean {
   if (!currentPi || currentPi.readyState !== WebSocket.OPEN) return false;
   currentPi.send(JSON.stringify({ type: "config_update", payload: JSON.stringify(screenInfo) }));
-  console.log("[ws] sent config_update to Pi");
+  logger.info("ws", "Sent config:update to Pi");
   return true;
 }
 
