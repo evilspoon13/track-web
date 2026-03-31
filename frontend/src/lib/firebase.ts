@@ -22,7 +22,7 @@ if (import.meta.env.VITE_AUTH_ENABLED !== "false") {
   googleProvider = new GoogleAuthProvider();
   db = getFirestore(app);
 
-  if (import.meta.env.DEV || import.meta.env.VITE_USE_EMULATOR === "true") {
+  if (import.meta.env.VITE_USE_EMULATOR === "true") {
     connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
     connectFirestoreEmulator(db, "localhost", 8080);
   }

@@ -5,6 +5,10 @@ import path from "path";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const port = env.PORT || "3000";
+  const rawTarget = env.TARGET || "localhost";
+
+  const httpTarget = rawTarget.replace(/^ws(s?):\/\//, "http$1://");
+  const wsTarget = rawTarget.replace(/^http(s?):\/\//, "ws$1://");
 
   return {
     plugins: [react()],
@@ -14,8 +18,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
-        "/api": `http://localhost:${port}`,
-        "/ws": { target: `ws://localhost:${port}`, ws: true },
+        "/api": { target: httpTarget, changeOrigin: true, secure: true },
+        "/ws": { target: wsTarget, ws: true, changeOrigin: true, secure: true },
       },
     },
   };

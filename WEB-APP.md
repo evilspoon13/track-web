@@ -70,7 +70,7 @@ Runs on `localhost:3000`. Emulator hosts are set automatically via the dev scrip
 ```bash
 npm run dev
 ```
-Runs on `localhost:5173`. Vite DEV mode auto-connects to the local emulators.
+Runs on `localhost:5173`. To use the Firebase emulators, set `VITE_USE_EMULATOR=true` in `.env`.
 
 > To work on UI only (no backend or emulator needed), set `VITE_AUTH_ENABLED=false` in `.env`.
 
