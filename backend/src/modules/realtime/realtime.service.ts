@@ -1,5 +1,17 @@
 import { type RawData, WebSocket } from "ws";
 import type { PiConnection, ClientConnection } from "./realtime.types";
+import { persistLogBuffer } from "../logs/logs.service";
+import { logger } from "../../common/logger";
+
+interface UploadSession {
+  deviceId: string;
+  filename: string;
+  fileSize: number;
+  chunks: Map<number, Buffer>;
+  startedAt: number;
+}
+
+const activeSessions = new Map<string, UploadSession>();
 
 let clientSockets = new Map<string, ClientConnection>();
 const piSockets = new Map<string, PiConnection>();
@@ -14,13 +26,20 @@ setInterval(() => {
   for (const [piId, connection] of piSockets.entries()) {
     const ageMs = now - connection.lastHeartbeat;
     if (ageMs > PI_DEADLINE_MS) {
-      console.log(`[ws] Pi ${piId} stale (${ageMs}ms). dropping`);
+      logger.warn("ws", "Pi stale, dropping", { piId, ageMs });
       try {
         connection.socket.close(1000, "Pi heartbeat missed");
       } catch {
         // ignore close failures
       }
       disconnectPi(piId);
+    }
+  }
+  const UPLOAD_TTL_MS = 5 * 60 * 1000;
+  for (const [key, session] of activeSessions.entries()) {
+    if (now - session.startedAt > UPLOAD_TTL_MS) {
+      logger.warn("logs", "Dropping stale upload session", { filename: session.filename });
+      activeSessions.delete(key);
     }
   }
 }, PI_MONITOR_INTERVAL_MS);
@@ -151,7 +170,16 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   try {
     const parsed = JSON.parse(message);
     if (parsed && typeof parsed === "object") {
-      const obj = parsed as { type?: string; device_id?: unknown; payload?: unknown };
+      const obj = parsed as {
+        type?: string;
+        device_id?: unknown;
+        payload?: unknown;
+        filename?: unknown;
+        file_size?: unknown;
+        chunk_index?: unknown;
+        data?: unknown;
+        total_chunks?: unknown;
+      };
       if (obj.type === "heartbeat") {
         const nextPiId = normalizePiId(obj);
         if (nextPiId) {
@@ -192,12 +220,66 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         }
 
         return activePiId;
+      } else if (obj.type === "log_upload_start") {
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        const filename = obj.filename as string;
+        const fileSize = obj.file_size as number;
+        if (!filename) return activePiId;
+        activeSessions.set(filename, {
+          deviceId,
+          filename,
+          fileSize,
+          chunks: new Map(),
+          startedAt: Date.now(),
+        });
+        logger.info("logs", "Upload start", { filename, fileSize, deviceId });
+      } else if (obj.type === "log_upload_chunk") {
+        const filename = obj.filename as string;
+        const chunkIndex = obj.chunk_index as number;
+        const data = obj.data as string;
+        const session = activeSessions.get(filename);
+        if (session) {
+          session.chunks.set(chunkIndex, Buffer.from(data, "base64"));
+        }
+      } else if (obj.type === "log_upload_end") {
+        const filename = obj.filename as string;
+        const totalChunks = obj.total_chunks as number;
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        const session = activeSessions.get(filename);
+        if (!session) return activePiId;
+        activeSessions.delete(filename);
+
+        if (session.chunks.size !== totalChunks) {
+          logger.warn("logs", "Incomplete upload", { filename, got: session.chunks.size, expected: totalChunks });
+          return activePiId;
+        }
+
+        const ordered: Buffer[] = [];
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = session.chunks.get(i);
+          if (!chunk) {
+            logger.warn("logs", "Missing chunk", { filename, chunkIndex: i });
+            return activePiId;
+          }
+          ordered.push(chunk);
+        }
+
+        const sessionName = filename.replace(/\.bin$/, "");
+        persistLogBuffer(deviceId, sessionName, Buffer.concat(ordered)).catch(console.error);
+        logger.info("logs", "Upload complete", { filename, totalChunks });
       }
     }
   } catch {
     // ignore malformed non-JSON packets
   }
   return activePiId;
+}
+
+export function sendConfigToPi(screenInfo: unknown): boolean {
+  if (!currentPi || currentPi.readyState !== WebSocket.OPEN) return false;
+  currentPi.send(JSON.stringify({ type: "config_update", payload: JSON.stringify(screenInfo) }));
+  logger.info("ws", "Sent config:update to Pi");
+  return true;
 }
 
 export function handleClientMessage(
@@ -231,10 +313,6 @@ export function handleClientMessage(
     }
   } catch {
     // ignore malformed non-JSON packets
-  }
-
-  if (activeClientId && currentPi && currentPi.readyState == WebSocket.OPEN) {
-    currentPi.send(JSON.stringify({ type: "config:update", payload: "New update incoming: " + message }));
   }
 
   return activeClientId;

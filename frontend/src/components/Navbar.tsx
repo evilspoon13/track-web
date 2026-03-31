@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import DraggableWidget from "./DraggableWidget";
 import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
-import { listScreens, loadScreen, saveScreen, deleteScreen } from "../utils/layoutIO";
+import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc, setDriverDisplay } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
 import { Save, RotateCcw, X, Upload } from "lucide-react";
 
@@ -71,6 +71,7 @@ export default function Navbar() {
     });
     dispatch({ type: "MARK_CLEAN", payload: { id: activeScreen.id } });
     if (state.driverDisplayDirty) {
+      await setDriverDisplay(state.driverDisplayScreen);
       dispatch({ type: "MARK_DRIVER_DISPLAY_CLEAN" });
     }
     setSaveStatus("Saved!");
@@ -110,12 +111,20 @@ export default function Navbar() {
   const handleDbcUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.name.endsWith(".dbc")) {
+      setDbcStatus("Error: must be a .dbc file");
+      e.target.value = "";
+      return;
+    }
     const content = await file.text();
-    await fetch("/api/dbc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    });
+    const result = await uploadDbc(content);
+    if ("error" in result) {
+      setDbcStatus(`Error: ${result.error}`);
+      e.target.value = "";
+      return;
+    }
+    dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config: result } });
+    dispatch({ type: "MARK_CAN_IDS_CLEAN" });
     setDbcStatus(file.name);
     e.target.value = "";
   };

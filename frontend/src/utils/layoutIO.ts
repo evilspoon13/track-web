@@ -3,12 +3,11 @@ import type {
   SavedLayout,
   PlacedWidget,
   FrameParserConfig,
-  FrameDefinition,
   DataFieldType,
   WidgetType,
 } from "../types";
 
-// Backend API shapes (mirrors graphics.types.ts + frame-parser.types.ts)
+// Backend API shapes (mirrors graphics.types.ts)
 interface BackendWidgetInfo {
   type: string;
   alarm: boolean;
@@ -30,7 +29,7 @@ interface BackendScreenInfo {
   widgets: BackendWidgetInfo[];
 }
 
-async function authFetch(input: string, init?: RequestInit): Promise<Response> {
+export async function authFetch(input: string, init?: RequestInit): Promise<Response> {
   if (import.meta.env.VITE_AUTH_ENABLED === "false") {
     return fetch(input, init);
   }
@@ -134,24 +133,58 @@ export async function deleteScreen(name: string): Promise<void> {
   });
 }
 
-export async function getFrameParserConfig(): Promise<FrameParserConfig> {
+export async function getDriverDisplay(): Promise<string | null> {
   try {
-    const res = await authFetch("/api/frame-parser");
+    const res = await authFetch("/api/graphics/driver-display");
+    if (!res.ok) return null;
+    const data = await res.json() as { driverDisplayScreen: string | null };
+    return data.driverDisplayScreen;
+  } catch {
+    return null;
+  }
+}
+
+export async function setDriverDisplay(screenName: string | null): Promise<void> {
+  await authFetch("/api/graphics/driver-display", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ screenName }),
+  });
+}
+
+export async function getDbc(): Promise<FrameParserConfig> {
+  try {
+    const res = await authFetch("/api/dbc");
     if (res.status === 404) return {};
-    const data = await res.json();
+    const data = await res.json() as { frames: FrameParserConfig };
     return data.frames ?? {};
   } catch {
     return {};
   }
 }
 
-export async function saveCanFrame(
-  canId: string,
-  frame: FrameDefinition
-): Promise<void> {
-  await authFetch("/api/frame-parser", {
+export async function saveDbc(config: FrameParserConfig): Promise<void> {
+  await authFetch("/api/dbc", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ can_id: canId, frameDefinition: frame }),
+    body: JSON.stringify({ frames: config }),
   });
+}
+
+export async function uploadDbc(rawContent: string): Promise<FrameParserConfig | { error: string }> {
+  try {
+    const res = await authFetch("/api/dbc/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw: rawContent }),
+    });
+    if (!res.ok) {
+      const data = await res.json() as { msg?: string };
+      return { error: data.msg ?? "Upload failed" };
+    }
+    const data = await res.json() as { frames: FrameParserConfig };
+    return data.frames ?? {};
+  } catch {
+    return { error: "Upload failed" };
+  }
 }

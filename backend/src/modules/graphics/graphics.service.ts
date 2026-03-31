@@ -6,6 +6,19 @@ import type { ScreenInfo } from "./graphics.types";
 const col = (uid: string) =>
   db.collection("users").doc(uid).collection("screens");
 
+const settingsRef = (uid: string) =>
+  db.collection("users").doc(uid).collection("settings").doc("display");
+
+export async function getDriverDisplay(uid: string): Promise<string | null> {
+  const snap = await settingsRef(uid).get();
+  if (!snap.exists) return null;
+  return (snap.data()!.driverDisplayScreen as string) ?? null;
+}
+
+export async function setDriverDisplay(uid: string, screenName: string | null): Promise<void> {
+  await settingsRef(uid).set({ driverDisplayScreen: screenName ?? null });
+}
+
 export async function getScreenNames(uid: string): Promise<string[] | null> {
   const snap = await col(uid).select("name").get();
   if (snap.empty) return null;
