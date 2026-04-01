@@ -180,6 +180,8 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         data?: unknown;
         total_chunks?: unknown;
       };
+      logger.info("ws", `Pi message: ${obj.type}`, { device_id: obj.device_id });
+
       if (obj.type === "heartbeat") {
         const nextPiId = normalizePiId(obj);
         if (nextPiId) {
