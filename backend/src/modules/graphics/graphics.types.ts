@@ -19,6 +19,7 @@ export enum WidgetType {
     Bar = "bar",
     Number = "number",
     Indicator = "indicator"
+    Graph = "graph"
 }
 
 export interface positionInfo {
