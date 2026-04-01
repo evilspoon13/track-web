@@ -20,7 +20,7 @@ export function createRealtimeGateway(server: HttpServer): void {
       socket.on("close", () => {
         logger.info("ws", "Pi disconnected", { piId: activePiId ?? "unregistered" });
         if (activePiId) {
-          RealtimeService.disconnectPi(activePiId);
+          RealtimeService.disconnectPi(activePiId, socket);
         }
       });
     }
@@ -33,7 +33,7 @@ export function createRealtimeGateway(server: HttpServer): void {
       socket.on("close", () => {
         logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
         if (activeClientId) {
-          RealtimeService.disconnectClient(activeClientId);
+          RealtimeService.disconnectClient(activeClientId, socket);
         }
       });
     }

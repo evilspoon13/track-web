@@ -54,12 +54,16 @@ export async function deleteScreenById(req: Request<{ screenId: string }>, res: 
 
 export async function updateScreen(req: Request<{ screenId: string }>, res: Response) {
   try {
+    if (!req.deviceId) {
+      res.status(403).json({ msg: "No device assigned" });
+      return;
+    }
     const screenId = req.params.screenId;
     const screen = req.body as ScreenInfo;
     await graphicsService.saveScreen(req.uid, screenId, screen);
     const driverDisplay = await graphicsService.getDriverDisplay(req.uid);
     if (driverDisplay === screen.name) {
-      sendConfigToPi(screen);
+      sendConfigToPi(req.deviceId, screen);
     }
     res.status(200).json({ success: true });
   } catch (error) {
@@ -78,11 +82,15 @@ export async function getDriverDisplayHandler(req: Request, res: Response) {
 
 export async function setDriverDisplayHandler(req: Request, res: Response) {
   try {
+    if (!req.deviceId) {
+      res.status(403).json({ msg: "No device assigned" });
+      return;
+    }
     const { screenName } = req.body as { screenName: string | null };
     await graphicsService.setDriverDisplay(req.uid, screenName ?? null);
     if (screenName) {
       const screen = await graphicsService.getScreenById(req.uid, screenName);
-      if (screen) sendConfigToPi(screen);
+      if (screen) sendConfigToPi(req.deviceId, screen);
     }
     res.status(200).json({ msg: "Driver display updated" });
   } catch (error) {

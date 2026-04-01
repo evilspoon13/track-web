@@ -17,7 +17,6 @@ let clientSockets = new Map<string, ClientConnection>();
 const piSockets = new Map<string, PiConnection>();
 const socketToPiId = new Map<WebSocket, string>();
 const socketToClientId = new Map<WebSocket, string>();
-let currentPi: WebSocket | null = null;
 const PI_DEADLINE_MS = 20_000;
 const PI_MONITOR_INTERVAL_MS = 5_000;
 
@@ -63,14 +62,21 @@ function normalizeClientId(parsed: { client_id?: unknown }): string | null {
 function registerPiById(piId: string, socket: WebSocket): PiConnection {
   const existingForSocket = socketToPiId.get(socket);
   if (existingForSocket && existingForSocket !== piId) {
-    piSockets.delete(existingForSocket);
+    const previousConnection = piSockets.get(existingForSocket);
+    if (previousConnection?.socket === socket) {
+      piSockets.delete(existingForSocket);
+    }
   }
 
   const existing = piSockets.get(piId);
   if (existing) {
     if (existing.socket !== socket) {
+      const oldSocket = existing.socket;
+      if (socketToPiId.get(oldSocket) === piId) {
+        socketToPiId.delete(oldSocket);
+      }
       try {
-        existing.socket.close(1000, "Pi web socket replaced");
+        oldSocket.close(1000, "Pi web socket replaced");
       } catch {
         // ignore close failures
       }
@@ -81,7 +87,6 @@ function registerPiById(piId: string, socket: WebSocket): PiConnection {
     existing.socket = socket;
     socketToPiId.set(socket, piId);
     piSockets.set(piId, existing);
-    currentPi = socket;
     return existing;
   }
 
@@ -93,21 +98,27 @@ function registerPiById(piId: string, socket: WebSocket): PiConnection {
 
   piSockets.set(piId, connection);
   socketToPiId.set(socket, piId);
-  currentPi = socket;
   return connection;
 }
 
 function registerClientById(clientId: string, socket: WebSocket): ClientConnection {
   const existingForSocket = socketToClientId.get(socket);
   if (existingForSocket && existingForSocket !== clientId) {
-    clientSockets.delete(existingForSocket);
+    const previousConnection = clientSockets.get(existingForSocket);
+    if (previousConnection?.socket === socket) {
+      clientSockets.delete(existingForSocket);
+    }
   }
 
   const existing = clientSockets.get(clientId);
   if (existing) {
     if (existing.socket !== socket) {
+      const oldSocket = existing.socket;
+      if (socketToClientId.get(oldSocket) === clientId) {
+        socketToClientId.delete(oldSocket);
+      }
       try {
-        existing.socket.close(1000, "Client web socket replaced");
+        oldSocket.close(1000, "Client web socket replaced");
       } catch {
         // ignore close failures
       }
@@ -132,14 +143,20 @@ function registerClientById(clientId: string, socket: WebSocket): ClientConnecti
   return connection;
 }
 
-export function disconnectPi(piId: string) {
+export function disconnectPi(piId: string, socket?: WebSocket) {
   const connection = piSockets.get(piId);
   if (!connection) {
+    if (socket && socketToPiId.get(socket) === piId) {
+      socketToPiId.delete(socket);
+    }
     return;
   }
 
-  if (currentPi === connection.socket) {
-    currentPi = null;
+  if (socket && connection.socket !== socket) {
+    if (socketToPiId.get(socket) === piId) {
+      socketToPiId.delete(socket);
+    }
+    return;
   }
 
   if (socketToPiId.get(connection.socket) === piId) {
@@ -149,9 +166,19 @@ export function disconnectPi(piId: string) {
   piSockets.delete(piId);
 }
 
-export function disconnectClient(id: string) {
+export function disconnectClient(id: string, socket?: WebSocket) {
   const connection = clientSockets.get(id);
   if (!connection) {
+    if (socket && socketToClientId.get(socket) === id) {
+      socketToClientId.delete(socket);
+    }
+    return;
+  }
+
+  if (socket && connection.socket !== socket) {
+    if (socketToClientId.get(socket) === id) {
+      socketToClientId.delete(socket);
+    }
     return;
   }
 
@@ -277,11 +304,29 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   return activePiId;
 }
 
-export function sendConfigToPi(screenInfo: unknown): boolean {
-  if (!currentPi || currentPi.readyState !== WebSocket.OPEN) return false;
-  currentPi.send(JSON.stringify({ type: "config_update", payload: JSON.stringify(screenInfo) }));
-  logger.info("ws", "Sent config:update to Pi");
-  return true;
+export function sendConfigToPi(deviceId: string, screenInfo: unknown): boolean {
+  // Keep payload as a JSON string for backwards compatibility with the current Pi handler.
+  return sendMessageToPi(deviceId, { type: "config_update", payload: JSON.stringify(screenInfo) });
+}
+
+export function sendMessageToPi(deviceId: string, message: unknown): boolean {
+  const connection = piSockets.get(deviceId);
+  if (!connection) return false;
+  if (connection.socket.readyState !== WebSocket.OPEN) return false;
+
+  const envelope =
+    message && typeof message === "object"
+      ? { device_id: deviceId, ...message }
+      : { device_id: deviceId, payload: message };
+
+  try {
+    connection.socket.send(JSON.stringify(envelope));
+    logger.info("ws", "Sent message to Pi", { deviceId });
+    return true;
+  } catch (error) {
+    logger.warn("ws", "Failed to send message to Pi", { deviceId, error: String(error) });
+    return false;
+  }
 }
 
 export function handleClientMessage(
