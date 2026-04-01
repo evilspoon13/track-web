@@ -47,8 +47,7 @@ export async function authFetch(input: string, init?: RequestInit): Promise<Resp
 function widgetToBackend(
   w: PlacedWidget,
   fpc: FrameParserConfig
-): BackendWidgetInfo | null {
-  if (w.type === "graph") return null;
+): BackendWidgetInfo {
   return {
     type: w.type,
     alarm: w.alarm ?? false,
@@ -116,9 +115,7 @@ export async function saveScreen(
 ): Promise<void> {
   const payload: BackendScreenInfo = {
     name: screen.name,
-    widgets: screen.widgets
-      .map((w) => widgetToBackend(w, frameParserConfig))
-      .filter((w): w is BackendWidgetInfo => w !== null),
+    widgets: screen.widgets.map((w) => widgetToBackend(w, frameParserConfig)),
   };
   await authFetch(`/api/graphics/screens/${encodeURIComponent(screen.name)}`, {
     method: "POST",

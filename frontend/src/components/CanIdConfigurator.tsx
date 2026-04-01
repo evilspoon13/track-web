@@ -141,7 +141,7 @@ export default function CanIdConfigurator() {
       return { ...prev, [canId]: frameSet };
     });
     setActiveSignal({ canId, signalIdx: newIdx });
-    setByteSelection(null);
+    setByteSelection({ canId, signalIdx: newIdx, bytes: [freeByte] });
   };
 
   const handleRemoveSignal = (canId: string, signalIdx: number) => {

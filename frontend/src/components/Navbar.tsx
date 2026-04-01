@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import DraggableWidget from "./DraggableWidget";
 import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
-import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc, setDriverDisplay } from "../utils/layoutIO";
+import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc, setDriverDisplay, saveDbc } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
 import { Save, RotateCcw, X, Upload } from "lucide-react";
 
@@ -74,6 +74,10 @@ export default function Navbar() {
       await setDriverDisplay(state.driverDisplayScreen);
       dispatch({ type: "MARK_DRIVER_DISPLAY_CLEAN" });
     }
+    if (state.canIdsDirty) {
+      await saveDbc(state.frameParserConfig);
+      dispatch({ type: "MARK_CAN_IDS_CLEAN" });
+    }
     setSaveStatus("Saved!");
     setTimeout(() => setSaveStatus(""), 2000);
     refreshScreens();
@@ -134,9 +138,18 @@ export default function Navbar() {
     dispatch({ type: "SET_DRIVER_DISPLAY", payload: { screenName: pendingDriverDisplay } });
   };
 
-  const saveModalMessage = state.driverDisplayDirty && state.driverDisplayScreen
-    ? `This will save all screen configurations and update the Driver Display to "${state.driverDisplayScreen}".`
-    : "This will save the current screen configuration.";
+  const saveModalMessage = (() => {
+    if (state.driverDisplayDirty && state.driverDisplayScreen && state.canIdsDirty) {
+      return `This will save all screen configurations, CAN ID definitions, and update the Driver Display to "${state.driverDisplayScreen}".`;
+    }
+    if (state.driverDisplayDirty && state.driverDisplayScreen) {
+      return `This will save all screen configurations and update the Driver Display to "${state.driverDisplayScreen}".`;
+    }
+    if (state.canIdsDirty) {
+      return "This will save the current screen configuration and CAN ID definitions.";
+    }
+    return "This will save the current screen configuration.";
+  })();
 
   return (
     <>
@@ -335,7 +348,7 @@ export default function Navbar() {
             <button
               onClick={handleSave}
               className={`relative flex flex-1 flex-col items-center justify-center gap-1 rounded py-3 transition-colors duration-200 ${
-                activeScreen?.isDirty || state.driverDisplayDirty
+                activeScreen?.isDirty || state.driverDisplayDirty || state.canIdsDirty
                   ? "bg-gray-700 hover:bg-orange-700"
                   : "bg-gray-700 hover:bg-blue-700"
               }`}
@@ -345,7 +358,7 @@ export default function Navbar() {
               <span className="text-xs text-white">
                 {saveStatus || "Save"}
               </span>
-              {(activeScreen?.isDirty || state.driverDisplayDirty) && (
+              {(activeScreen?.isDirty || state.driverDisplayDirty || state.canIdsDirty) && (
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-orange-500" />
               )}
             </button>

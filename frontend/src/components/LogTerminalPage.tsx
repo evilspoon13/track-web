@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { LogEntry, LogsResponse } from "../types";
 import { authFetch } from "../utils/layoutIO";
 
-const DEVICE_ID = import.meta.env.VITE_DEVICE_ID ?? "dev-001";
-
 function formatTs(ts: number): string {
   const d = new Date(ts);
   const hh = d.getHours().toString().padStart(2, "0");
@@ -18,7 +16,7 @@ function formatCanId(canId: number): string {
 }
 
 async function fetchLogs(before?: number): Promise<LogsResponse> {
-  const params = new URLSearchParams({ device_id: DEVICE_ID, limit: "100" });
+  const params = new URLSearchParams({ limit: "100" });
   if (before !== undefined) params.set("before", String(before));
   const res = await authFetch(`/api/logs?${params.toString()}`);
   if (!res.ok) return { entries: [], nextCursor: null };
@@ -113,7 +111,7 @@ export default function LogTerminalPage() {
           </div>
         ))}
         {initialLoaded && entries.length === 0 && (
-          <div className="py-4 text-[10px] text-gray-600 text-center">no logs found for device {DEVICE_ID}</div>
+          <div className="py-4 text-[10px] text-gray-600 text-center">no logs found</div>
         )}
         <div ref={bottomRef} />
       </div>

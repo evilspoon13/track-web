@@ -83,10 +83,16 @@ export async function setDriverDisplayHandler(req: Request, res: Response) {
       return;
     }
     const { screenName } = req.body as { screenName: string | null };
-    await graphicsService.setDriverDisplay(req.uid, screenName ?? null);
     if (screenName) {
       const screen = await graphicsService.getScreenById(req.uid, screenName);
-      if (screen) sendConfigToPi(req.deviceId, screen);
+      if (!screen) {
+        res.status(404).json({ msg: "Screen not found" });
+        return;
+      }
+      await graphicsService.setDriverDisplay(req.uid, screenName);
+      sendConfigToPi(req.deviceId, screen);
+    } else {
+      await graphicsService.setDriverDisplay(req.uid, null);
     }
     res.status(200).json({ msg: "Driver display updated" });
   } catch (error) {

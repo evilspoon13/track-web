@@ -6,9 +6,9 @@ const MAX_LIMIT = 500;
 
 export async function getLogsHandler(req: Request, res: Response) {
   try {
-    const deviceId = req.query.device_id as string | undefined;
+    const deviceId = req.deviceId;
     if (!deviceId) {
-      res.status(400).json({ msg: "device_id is required" });
+      res.status(400).json({ msg: "No device linked to your account" });
       return;
     }
 

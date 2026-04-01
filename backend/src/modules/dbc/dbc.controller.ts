@@ -9,8 +9,8 @@ export async function getDbc(req: Request, res: Response) {
       return;
     }
     res.status(200).json(config);
-  } catch (error) {
-    res.status(500).json({ msg: String(error) });
+  } catch {
+    res.status(500).json({ msg: "Internal server error" });
   }
 }
 
@@ -18,8 +18,8 @@ export async function updateDbc(req: Request, res: Response) {
   try {
     const result = await dbcService.writeDbc(req.uid, req.body);
     res.status(200).json(result);
-  } catch (error) {
-    res.status(500).json({ msg: String(error) });
+  } catch {
+    res.status(500).json({ msg: "Internal server error" });
   }
 }
 
@@ -38,7 +38,7 @@ export async function uploadDbc(req: Request, res: Response) {
       return;
     }
     res.status(200).json(config);
-  } catch (error) {
-    res.status(500).json({ msg: String(error) });
+  } catch {
+    res.status(500).json({ msg: "Internal server error" });
   }
 }
