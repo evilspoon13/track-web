@@ -3,6 +3,7 @@ import { requireAuth } from "./middleware/auth";
 import { requireDeviceAuth } from "./middleware/deviceAuth";
 import { httpLogger } from "./middleware/httpLogger";
 import { logger } from "./common/logger";
+import devicesRoutes from "./modules/devices/devices.routes";
 import graphicsRoutes from "./modules/graphics/graphics.routes";
 import dbcRoutes from "./modules/dbc/dbc.routes";
 import logsRoutes from "./modules/logs/logs.routes";
@@ -15,6 +16,9 @@ app.use(express.json());
 app.get("/", (_req, res) => {
   res.send("FSAE Driver Display - Web Server");
 });
+
+// device-authenticated routes (device-secret)
+app.use("/api/devices", requireDeviceAuth, devicesRoutes);
 
 // user-authenticated routes (Firebase token)
 app.use("/api", requireAuth);
