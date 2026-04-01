@@ -1,5 +1,21 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
+
+export async function registerDeviceHeartbeat(deviceId: string, hostname?: string): Promise<void> {
+  await db.collection("devices").doc(deviceId).set({
+    uuid: deviceId,
+    ...(hostname ? { hostname } : {}),
+    lastSeen: FieldValue.serverTimestamp(),
+    connected: true,
+  }, { merge: true });
+}
+
+export async function markDeviceDisconnected(deviceId: string): Promise<void> {
+  await db.collection("devices").doc(deviceId).set(
+    { connected: false, lastSeen: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+}
 import type { RegisterDeviceResult } from "./devices.types";
 
 function normalizeEmail(email: string): string | null {

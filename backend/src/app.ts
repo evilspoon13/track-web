@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import { requireAuth } from "./middleware/auth";
 import { requireDeviceAuth } from "./middleware/deviceAuth";
+import { requireDevice } from "./middleware/deviceAccess";
 import { httpLogger } from "./middleware/httpLogger";
 import { logger } from "./common/logger";
 import devicesRoutes from "./modules/devices/devices.routes";
@@ -22,6 +23,7 @@ app.use("/api/devices", requireDeviceAuth, devicesRoutes);
 
 // user-authenticated routes (Firebase token)
 app.use("/api", requireAuth);
+app.use("/api", requireDevice);
 
 app.use("/api/graphics", graphicsRoutes);
 app.use("/api/dbc", dbcRoutes);

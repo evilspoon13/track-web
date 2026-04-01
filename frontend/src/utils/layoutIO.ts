@@ -1,4 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
+
+export class DeviceNotRegisteredError extends Error {
+  constructor() { super("Device not registered"); }
+}
 import type {
   SavedLayout,
   PlacedWidget,
@@ -35,13 +39,15 @@ export async function authFetch(input: string, init?: RequestInit): Promise<Resp
   }
   const { auth } = await import("../lib/firebase");
   const token = await auth.currentUser?.getIdToken();
-  return fetch(input, {
+  const res = await fetch(input, {
     ...init,
     headers: {
       ...init?.headers,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
+  if (res.status === 403) throw new DeviceNotRegisteredError();
+  return res;
 }
 
 function widgetToBackend(
