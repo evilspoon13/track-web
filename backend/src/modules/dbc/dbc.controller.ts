@@ -5,7 +5,7 @@ export async function getDbc(req: Request, res: Response) {
   try {
     const config = await dbcService.readDbc(req.uid);
     if (config === null) {
-      res.status(404).json({ msg: "Not Found" });
+      res.status(200).json({ frames: {} });
       return;
     }
     res.status(200).json(config);
