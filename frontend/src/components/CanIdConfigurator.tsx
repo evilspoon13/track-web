@@ -34,16 +34,23 @@ const SELECT_STYLE = {
   paddingRight: "1.75rem",
 };
 
+// Convert between bits (data model / DBC) and bytes (UI)
+const bitToByte = (startBit: number) => Math.floor(startBit / 8);
+const bitLenToByteLen = (startBit: number, bitLen: number) =>
+  Math.ceil((startBit + bitLen) / 8) - Math.floor(startBit / 8);
+const byteToBit = (byteIdx: number) => byteIdx * 8;
+const byteLenToBitLen = (byteLen: number) => byteLen * 8;
+
 function wouldOverlap(
   frame: FrameDefinition,
   signalIdx: number,
-  startByte: number,
-  length: number
+  startBit: number,
+  bitLen: number
 ): boolean {
-  const aEnd = startByte + length;
+  const aEnd = startBit + bitLen;
   return frame.signals.some((sig, i) => {
     if (i === signalIdx) return false;
-    return startByte < sig.start_byte + sig.length && aEnd > sig.start_byte;
+    return startBit < sig.start_byte + sig.length && aEnd > sig.start_byte;
   });
 }
 
@@ -118,11 +125,13 @@ export default function CanIdConfigurator() {
     if (!frame) return;
     const taken = new Set<number>();
     frame.signals.forEach((s) => {
-      for (let b = s.start_byte; b < s.start_byte + s.length; b++) taken.add(b);
+      const sb = bitToByte(s.start_byte);
+      const eb = sb + bitLenToByteLen(s.start_byte, s.length);
+      for (let b = sb; b < eb; b++) taken.add(b);
     });
     let freeByte = 0;
     for (let i = 0; i < 8; i++) { if (!taken.has(i)) { freeByte = i; break; } }
-    const newSignal: FrameSignal = { name: `SIGNAL_${frame.signals.length + 1}`, start_byte: freeByte, length: 1, type: "uint8", scale: 1, offset: 0 };
+    const newSignal: FrameSignal = { name: `SIGNAL_${frame.signals.length + 1}`, start_byte: byteToBit(freeByte), length: 8, type: "uint8", scale: 1, offset: 0 };
     const newIdx = frame.signals.length;
     const updatedFrame = { ...frame, signals: [...frame.signals, newSignal] };
     dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: updatedFrame } });
@@ -152,11 +161,12 @@ export default function CanIdConfigurator() {
     if (!frame) return;
     const current = frame.signals[signalIdx]!;
     const merged = { ...current, ...updates };
-    merged.start_byte = Math.max(0, Math.min(7, merged.start_byte));
-    merged.length = Math.max(1, Math.min(8 - merged.start_byte, merged.length));
+    merged.start_byte = Math.max(0, Math.min(56, merged.start_byte));  // max start bit = byte 7
+    merged.length = Math.max(8, Math.min(64 - merged.start_byte, merged.length));  // min 1 byte = 8 bits
     if (wouldOverlap(frame, signalIdx, merged.start_byte, merged.length)) return;
-    if (TYPE_BYTES[merged.type] > merged.length) {
-      merged.type = [...SIGNAL_TYPES].reverse().find((t) => TYPE_BYTES[t] <= merged.length) ?? "uint8";
+    const byteLen = bitLenToByteLen(merged.start_byte, merged.length);
+    if (TYPE_BYTES[merged.type] > byteLen) {
+      merged.type = [...SIGNAL_TYPES].reverse().find((t) => TYPE_BYTES[t] <= byteLen) ?? "uint8";
     }
     const signals = frame.signals.map((s, i) => (i === signalIdx ? merged : s));
     dispatch({ type: "UPDATE_CAN_FRAME", payload: { canId, frame: { ...frame, signals } } });
@@ -170,15 +180,17 @@ export default function CanIdConfigurator() {
     const sig = frame.signals[signalIdx];
     if (!sig) return;
 
-    const isOwnedByActive =
-      byteIdx >= sig.start_byte && byteIdx < sig.start_byte + sig.length;
+    const sigStartByte = bitToByte(sig.start_byte);
+    const sigByteLen = bitLenToByteLen(sig.start_byte, sig.length);
+    const sigEndByte = sigStartByte + sigByteLen;
+    const isOwnedByActive = byteIdx >= sigStartByte && byteIdx < sigEndByte;
 
     if (isOwnedByActive) {
-      if (sig.length === 1) return;
-      if (byteIdx === sig.start_byte) {
-        handleUpdateSignal(canId, signalIdx, { start_byte: sig.start_byte + 1, length: sig.length - 1 });
-      } else if (byteIdx === sig.start_byte + sig.length - 1) {
-        handleUpdateSignal(canId, signalIdx, { length: sig.length - 1 });
+      if (sigByteLen === 1) return;
+      if (byteIdx === sigStartByte) {
+        handleUpdateSignal(canId, signalIdx, { start_byte: byteToBit(sigStartByte + 1), length: byteLenToBitLen(sigByteLen - 1) });
+      } else if (byteIdx === sigEndByte - 1) {
+        handleUpdateSignal(canId, signalIdx, { length: byteLenToBitLen(sigByteLen - 1) });
       }
       setByteSelection(null);
       return;
@@ -189,14 +201,14 @@ export default function CanIdConfigurator() {
 
     if (!isSameSelection) {
       setByteSelection({ canId, signalIdx, bytes: [byteIdx] });
-      handleUpdateSignal(canId, signalIdx, { start_byte: byteIdx, length: 1 });
+      handleUpdateSignal(canId, signalIdx, { start_byte: byteToBit(byteIdx), length: byteLenToBitLen(1) });
     } else {
       const existing = byteSelection!.bytes;
       const min = Math.min(...existing, byteIdx);
       const max = Math.max(...existing, byteIdx);
       const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
       setByteSelection({ canId, signalIdx, bytes: range });
-      handleUpdateSignal(canId, signalIdx, { start_byte: min, length: max - min + 1 });
+      handleUpdateSignal(canId, signalIdx, { start_byte: byteToBit(min), length: byteLenToBitLen(max - min + 1) });
     }
   };
 
@@ -211,7 +223,9 @@ export default function CanIdConfigurator() {
   const getByteOwnership = (frame: FrameDefinition): number[] => {
     const ownership = Array(8).fill(-1);
     frame.signals.forEach((sig, idx) => {
-      for (let b = sig.start_byte; b < sig.start_byte + sig.length && b < 8; b++) {
+      const startByte = Math.floor(sig.start_byte / 8);
+      const endByte = Math.ceil((sig.start_byte + sig.length) / 8);
+      for (let b = startByte; b < endByte && b < 8; b++) {
         ownership[b] = idx;
       }
     });
@@ -431,7 +445,7 @@ export default function CanIdConfigurator() {
                                 {sig.name}
                               </span>
                               <span className="flex-shrink-0 text-xs text-gray-500">
-                                {sig.start_byte}–{sig.start_byte + sig.length - 1}
+                                {bitToByte(sig.start_byte)}–{bitToByte(sig.start_byte) + bitLenToByteLen(sig.start_byte, sig.length) - 1}
                               </span>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleRemoveSignal(canId, sigIdx); }}
@@ -461,7 +475,7 @@ export default function CanIdConfigurator() {
                                       className="w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none"
                                       style={SELECT_STYLE}
                                     >
-                                      {SIGNAL_TYPES.filter((t) => TYPE_BYTES[t] <= sig.length).map((t) => (
+                                      {SIGNAL_TYPES.filter((t) => TYPE_BYTES[t] <= bitLenToByteLen(sig.start_byte, sig.length)).map((t) => (
                                         <option key={t} value={t} className="bg-gray-900">{t}</option>
                                       ))}
                                     </select>
