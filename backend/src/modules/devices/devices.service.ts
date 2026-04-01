@@ -19,18 +19,17 @@ export async function registerDevice(deviceId: string, teamMembers: string[]): P
   );
 
   const memberUids: string[] = [];
-  const skippedEmails: string[] = [];
 
   for (const email of normalizedEmails) {
     try {
       const user = await adminAuth.getUserByEmail(email);
       memberUids.push(user.uid);
     } catch {
-      skippedEmails.push(email);
+      // user doesn't exist yet in DB, device id will be assigned once user registers with auth
     }
   }
 
-  // Store the device membership (authoritative list of emails) + resolved uids.
+  // Store the device membership
   await db.collection("devices").doc(deviceId).set(
     {
       device_id: deviceId,
@@ -41,13 +40,13 @@ export async function registerDevice(deviceId: string, teamMembers: string[]): P
     { merge: true }
   );
 
-  // Overwrite each user's device mapping (1 device per user).
+  // Overwrite each user's device mapping
   const batch = db.batch();
   for (const uid of memberUids) {
     batch.set(db.collection("users").doc(uid), { device_id: deviceId }, { merge: true });
   }
   await batch.commit();
 
-  return { device_id: deviceId, teamMembers: normalizedEmails, memberUids, skippedEmails };
+  return { device_id: deviceId, teamMembers: normalizedEmails, memberUids };
 }
 

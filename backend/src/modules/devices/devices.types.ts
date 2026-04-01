@@ -6,5 +6,4 @@ export interface RegisterDeviceResult {
   device_id: string;
   teamMembers: string[];
   memberUids: string[];
-  skippedEmails: string[];
 }
