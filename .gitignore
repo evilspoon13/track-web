@@ -50,4 +50,6 @@ CLAUDE.md
 .claude
 .mcp.json
 .playwright-mcp
+
 frontend/dist/
+backend/dist/
