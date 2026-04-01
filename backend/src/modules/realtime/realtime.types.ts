@@ -1,10 +1,13 @@
-import { WebSocket } from "ws"
+import { WebSocket } from "ws";
 
 export interface BaseConnection {
-    socket: WebSocket,
-    connectedAt: number,
-    lastHeartbeat: number
+  socket: WebSocket;
+  connectedAt: number;
+  lastHeartbeat: number;
 }
 
-export interface ClientConnection extends BaseConnection {}
+export interface ClientConnection extends BaseConnection {
+  uid?: string;
+  deviceId?: string;
+}
 export interface PiConnection extends BaseConnection {}

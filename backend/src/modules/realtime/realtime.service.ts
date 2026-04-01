@@ -2,6 +2,7 @@ import { type RawData, WebSocket } from "ws";
 import type { PiConnection, ClientConnection } from "./realtime.types";
 import { persistLogBuffer } from "../logs/logs.service";
 import { logger } from "../../common/logger";
+import { adminAuth, db } from "../../lib/firebaseAdmin";
 
 interface UploadSession {
   deviceId: string;
@@ -143,6 +144,47 @@ function registerClientById(clientId: string, socket: WebSocket): ClientConnecti
   return connection;
 }
 
+async function resolveDeviceIdForUid(uid: string, emailHint?: string): Promise<string | null> {
+  const userRef = db.collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  const existingDeviceId = userSnap.exists ? (userSnap.data()?.device_id as unknown) : undefined;
+  if (typeof existingDeviceId === "string" && existingDeviceId.trim().length) {
+    return existingDeviceId;
+  }
+
+  let email = typeof emailHint === "string" ? emailHint.trim().toLowerCase() : undefined;
+  if (!email) {
+    const userRecord = await adminAuth.getUser(uid);
+    email = userRecord.email?.trim().toLowerCase();
+  }
+  if (!email) return null;
+
+  const deviceSnaps = await db.collection("devices")
+    .where("teamMembers", "array-contains", email)
+    .get();
+
+  let newestDeviceId: string | null = null;
+  let newestUpdatedAtMs = -1;
+
+  for (const doc of deviceSnaps.docs) {
+    const data = doc.data();
+    const updatedAt = data.updatedAt as { toMillis?: () => number } | undefined;
+    const updatedAtMs = typeof updatedAt?.toMillis === "function" ? updatedAt.toMillis() : 0;
+    if (updatedAtMs > newestUpdatedAtMs) {
+      newestUpdatedAtMs = updatedAtMs;
+      newestDeviceId = (typeof data.device_id === "string" && data.device_id.trim().length)
+        ? (data.device_id as string)
+        : doc.id;
+    }
+  }
+
+  if (newestDeviceId) {
+    await userRef.set({ device_id: newestDeviceId }, { merge: true });
+  }
+
+  return newestDeviceId;
+}
+
 export function disconnectPi(piId: string, socket?: WebSocket) {
   const connection = piSockets.get(piId);
   if (!connection) {
@@ -241,7 +283,10 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
             });
 
             for (const clientConnection of clientSockets.values()) {
-              if (clientConnection.socket.readyState === WebSocket.OPEN) {
+              if (
+                clientConnection.socket.readyState === WebSocket.OPEN &&
+                clientConnection.deviceId === activePiId
+              ) {
                 clientConnection.socket.send(telemetryPayload);
               }
             }
@@ -329,18 +374,48 @@ export function sendMessageToPi(deviceId: string, message: unknown): boolean {
   }
 }
 
-export function handleClientMessage(
+export async function handleClientMessage(
   socket: WebSocket,
   data: RawData,
   registeredClientId?: string
-): string | undefined {
+): Promise<string | undefined> {
   const message = data.toString();
   let activeClientId = registeredClientId;
 
   try {
     const parsed = JSON.parse(message);
     if (parsed && typeof parsed === "object") {
-      const obj = parsed as { client_id?: unknown };
+      const obj = parsed as { type?: unknown; token?: unknown; client_id?: unknown };
+
+      if (obj.type === "auth" && typeof obj.token === "string") {
+        try {
+          const decoded = await adminAuth.verifyIdToken(obj.token);
+          const uid = decoded.uid;
+          const emailHint = typeof (decoded as { email?: unknown }).email === "string"
+            ? (decoded as { email: string }).email
+            : undefined;
+
+          const deviceId = await resolveDeviceIdForUid(uid, emailHint);
+          const connection = registerClientById(uid, socket);
+          connection.uid = uid;
+          if (deviceId) {
+            connection.deviceId = deviceId;
+          } else {
+            delete connection.deviceId;
+          }
+          connection.lastHeartbeat = Date.now();
+          activeClientId = uid;
+          return activeClientId;
+        } catch {
+          try {
+            socket.close(1008, "Invalid auth token");
+          } catch {
+            // ignore close failures
+          }
+          return activeClientId;
+        }
+      }
+
       const nextClientId = normalizeClientId(obj);
       if (nextClientId) {
         const connection = clientSockets.get(nextClientId);

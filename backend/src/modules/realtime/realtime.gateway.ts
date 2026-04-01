@@ -27,7 +27,9 @@ export function createRealtimeGateway(server: HttpServer): void {
     else if (path === "/ws/client") {
       logger.info("ws", "Client connected", { path });
       socket.on("message", (data) => {
-        activeClientId = RealtimeService.handleClientMessage(socket, data, activeClientId);
+        RealtimeService.handleClientMessage(socket, data, activeClientId)
+          .then((nextClientId) => { activeClientId = nextClientId; })
+          .catch(() => { /* ignore */ });
       });
 
       socket.on("close", () => {
