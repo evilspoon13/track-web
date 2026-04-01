@@ -18,7 +18,7 @@ export enum WidgetType {
     Gauge = "gauge",
     Bar = "bar",
     Number = "number",
-    Indicator = "indicator"
+    Indicator = "indicator",
     Graph = "graph"
 }
 
