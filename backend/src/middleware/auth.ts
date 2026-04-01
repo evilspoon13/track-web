@@ -10,6 +10,11 @@ declare global {
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
+    if (process.env.AUTH_ENABLED === "false") {
+      req.uid = "dev-user";
+      next();
+      return;
+    }
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
