@@ -6,10 +6,6 @@ import { sendConfigToPi } from "../realtime/realtime.service";
 export async function getScreenNames(req: Request, res: Response) {
   try {
     const screens = await graphicsService.getScreenNames(req.uid);
-    if (screens === null) {
-      res.status(404).json({ msg: "No screens found" });
-      return;
-    }
     res.status(200).json({ screens });
   } catch (error) {
     res.status(500).json({ msg: error });

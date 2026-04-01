@@ -19,9 +19,9 @@ export async function setDriverDisplay(uid: string, screenName: string | null): 
   await settingsRef(uid).set({ driverDisplayScreen: screenName ?? null });
 }
 
-export async function getScreenNames(uid: string): Promise<string[] | null> {
+export async function getScreenNames(uid: string): Promise<string[]> {
   const snap = await col(uid).select("name").get();
-  if (snap.empty) return null;
+  if (snap.empty) return [];
   return snap.docs.map((d) => d.data().name as string);
 }
 
