@@ -5,7 +5,7 @@ import path from "path";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const port = env.PORT || "3000";
-  const rawTarget = env.TARGET || "localhost:"+port;
+  const rawTarget = env.TARGET || "http://localhost:"+port;
 
   const httpTarget = rawTarget.replace(/^ws(s?):\/\//, "http$1://");
   const wsTarget = rawTarget.replace(/^http(s?):\/\//, "ws$1://");
