@@ -2,10 +2,6 @@ import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { allowedSizes } from "../utils/widgetDefaults";
 import { hasCollision } from "../utils/gridHelpers";
 import CanIdConfigurator from "./CanIdConfigurator";
-import type { DataFieldType } from "../types";
-
-const DATA_FIELD_TYPES: DataFieldType[] = ["temperature", "pressure", "rpm"];
-
 const SELECT_STYLE = {
   backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
   backgroundPosition: "right 0.5rem center",
@@ -35,7 +31,7 @@ export default function ConfigPanel() {
       alarm: boolean;
       widgetCanId: string | undefined;
       widgetSignal: string | undefined;
-      widgetUnit: DataFieldType | undefined;
+      widgetUnit: string | undefined;
       widgetMin: number | undefined;
       widgetMax: number | undefined;
       widgetCautionThreshold: number | undefined;
@@ -123,23 +119,17 @@ export default function ConfigPanel() {
             <div className="mb-3 grid grid-cols-2 items-start gap-2">
               <div>
                 <label className="mb-1 block text-xs text-gray-500">Unit</label>
-                <select
+                <input
+                  type="text"
                   value={widget.widgetUnit ?? ""}
                   onChange={(e) =>
                     handleWidgetData({
-                      widgetUnit: (e.target.value as DataFieldType) || undefined,
+                      widgetUnit: e.target.value || undefined,
                     })
                   }
-                  className={selectClass}
-                  style={SELECT_STYLE}
-                >
-                  <option value="" className="bg-gray-900">None</option>
-                  {DATA_FIELD_TYPES.map((t) => (
-                    <option key={t} value={t} className="bg-gray-900">
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="e.g. °C, psi, RPM"
+                  className={numberInputClass}
+                />
               </div>
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">

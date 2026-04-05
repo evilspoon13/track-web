@@ -7,7 +7,6 @@ import type {
   SavedLayout,
   PlacedWidget,
   FrameParserConfig,
-  DataFieldType,
   WidgetType,
 } from "../types";
 
@@ -20,7 +19,7 @@ interface BackendWidgetInfo {
     can_id: number;
     can_id_label: string;
     signal: string;
-    unit: DataFieldType;
+    unit: string;
     min: number;
     max: number;
     caution_threshold: number;
@@ -62,7 +61,7 @@ function widgetToBackend(
       can_id: parseInt(w.widgetCanId ?? "0x0", 16),
       can_id_label: fpc[w.widgetCanId ?? ""]?.can_id_label ?? "",
       signal: w.widgetSignal ?? "",
-      unit: w.widgetUnit ?? "rpm",
+      unit: w.widgetUnit ?? "",
       min: w.widgetMin ?? 0,
       max: w.widgetMax ?? 100,
       caution_threshold: w.widgetCautionThreshold ?? 0,
