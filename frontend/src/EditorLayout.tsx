@@ -25,7 +25,6 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const dispatch = useEditorDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState({ w: 80, h: 80 });
-  const showDeviceTab = import.meta.env.VITE_AUTH_ENABLED === "false";
   const [page, setPage] = useState<"display" | "telemetry" | "logs" | "device">("display");
   const [activeType, setActiveType] = useState<WidgetType | null>(null);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
@@ -276,17 +275,15 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             >
               Log Terminal
             </button>
-            {showDeviceTab && (
-              <button
-                ref={deviceBtnRef}
-                onClick={() => setPage("device")}
-                className={`pb-1 text-base font-semibold transition-colors duration-200 ${
-                  page === "device" ? "text-white" : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                Device
-              </button>
-            )}
+            <button
+              ref={deviceBtnRef}
+              onClick={() => setPage("device")}
+              className={`pb-1 text-base font-semibold transition-colors duration-200 ${
+                page === "device" ? "text-white" : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              Device
+            </button>
             {indicator.ready && (
               <div
                 className="absolute bottom-0 h-0.5 bg-blue-500"
