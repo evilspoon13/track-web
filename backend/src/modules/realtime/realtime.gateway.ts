@@ -12,6 +12,14 @@ export function createRealtimeGateway(server: HttpServer): void {
     let activeClientId: string | undefined;
 
     if (path === "/ws/pi") {
+      const deviceId       = req.headers["x-device-id"] as string | undefined;
+      const secret         = req.headers["x-device-secret"] as string | undefined;
+      const expectedSecret = process.env.DEVICE_SECRET ?? "";
+      const secretOk       = expectedSecret === "" || secret === expectedSecret;
+      if (!deviceId || !secretOk) {
+        socket.close(1008, "Unauthorized");
+        return;
+      }
       logger.info("ws", "Pi connected", { path });
       socket.on("message", (data) => {
         activePiId = RealtimeService.handlePiMessage(socket, data, activePiId);

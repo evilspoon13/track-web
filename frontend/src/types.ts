@@ -32,9 +32,6 @@ export interface FrameDefinition {
 // key = "0x..." hex string
 export type FrameParserConfig = Record<string, FrameDefinition>;
 
-// Mirrors graphics.types.ts dataInfo
-export type DataFieldType = "temperature" | "pressure" | "rpm";
-
 export interface PlacedWidget {
   id: string;
   type: WidgetType;
@@ -45,7 +42,7 @@ export interface PlacedWidget {
   alarm?: boolean;
   widgetCanId?: string;    // hex string like "0x100", references a key in frameParserConfig
   widgetSignal?: string;   // signal name within that CAN frame
-  widgetUnit?: DataFieldType;
+  widgetUnit?: string;
   widgetMin?: number;
   widgetMax?: number;
   widgetCautionThreshold?: number;
@@ -101,7 +98,7 @@ export type EditorAction =
         alarm?: boolean;
         widgetCanId?: string;
         widgetSignal?: string;
-        widgetUnit?: DataFieldType;
+        widgetUnit?: string;
         widgetMin?: number;
         widgetMax?: number;
         widgetCautionThreshold?: number;

@@ -1,6 +1,7 @@
 import { type RawData, WebSocket } from "ws";
 import type { PiConnection, ClientConnection } from "./realtime.types";
 import { persistLogBuffer } from "../logs/logs.service";
+import { registerDeviceHeartbeat, markDeviceDisconnected } from "../devices/devices.service";
 import { logger } from "../../common/logger";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
 
@@ -206,6 +207,7 @@ export function disconnectPi(piId: string, socket?: WebSocket) {
   }
 
   piSockets.delete(piId);
+  markDeviceDisconnected(piId).catch(console.error);
 }
 
 export function disconnectClient(id: string, socket?: WebSocket) {
@@ -262,6 +264,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
           }
 
           activePiId = nextPiId;
+          registerDeviceHeartbeat(nextPiId).catch(console.error);
         } else if (registeredPiId) {
           const connection = piSockets.get(registeredPiId);
           if (connection && connection.socket === socket) {
@@ -430,6 +433,20 @@ export async function handleClientMessage(
         const connection = clientSockets.get(registeredClientId);
         if (connection && connection.socket === socket) {
           connection.lastHeartbeat = Date.now();
+        }
+      }
+
+      if (obj.type === "auth" && typeof obj.token === "string" && activeClientId) {
+        try {
+          const decoded = await adminAuth.verifyIdToken(obj.token);
+          const userSnap = await db.collection("users").doc(decoded.uid).get();
+          const deviceId = userSnap.exists ? (userSnap.data()?.device_id as string | undefined) : undefined;
+          if (deviceId) {
+            const conn = clientSockets.get(activeClientId);
+            if (conn?.socket === socket) conn.deviceId = deviceId;
+          }
+        } catch {
+          // invalid token — deviceId stays unset, no telemetry delivered
         }
       }
     }

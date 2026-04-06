@@ -1,5 +1,21 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
+
+export async function registerDeviceHeartbeat(deviceId: string, hostname?: string): Promise<void> {
+  await db.collection("devices").doc(deviceId).set({
+    uuid: deviceId,
+    ...(hostname ? { hostname } : {}),
+    lastSeen: FieldValue.serverTimestamp(),
+    connected: true,
+  }, { merge: true });
+}
+
+export async function markDeviceDisconnected(deviceId: string): Promise<void> {
+  await db.collection("devices").doc(deviceId).set(
+    { connected: false, lastSeen: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+}
 import type { RegisterDeviceResult } from "./devices.types";
 
 function normalizeEmail(email: string): string | null {
@@ -9,6 +25,23 @@ function normalizeEmail(email: string): string | null {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+export async function getDevice(deviceId: string): Promise<{ device_id: string; teamMembers: string[]; connected: boolean }> {
+  const snap = await db.collection("devices").doc(deviceId).get();
+  if (!snap.exists) {
+    return { device_id: deviceId, teamMembers: [], connected: false };
+  }
+  const data = snap.data()!;
+  return {
+    device_id: deviceId,
+    teamMembers: Array.isArray(data.teamMembers) ? data.teamMembers : [],
+    connected: data.connected === true,
+  };
+}
+
+export async function updateTeamMembers(deviceId: string, teamMembers: string[]): Promise<RegisterDeviceResult> {
+  return registerDevice(deviceId, teamMembers);
 }
 
 export async function registerDevice(deviceId: string, teamMembers: string[]): Promise<RegisterDeviceResult> {

@@ -8,6 +8,7 @@ import GridCanvas from "./components/GridCanvas";
 import ConfigPanel from "./components/ConfigPanel";
 import TelemetryPage from "./components/TelemetryPage";
 import LogTerminalPage from "./components/LogTerminalPage";
+import DevicePage from "./components/DevicePage";
 import { defaultSize, allowedSizes } from "./utils/widgetDefaults";
 import { pixelToGrid, hasCollision, clampToGrid } from "./utils/gridHelpers";
 import { GRID_COLS, GRID_ROWS } from "./utils/widgetDefaults";
@@ -24,7 +25,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const dispatch = useEditorDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState({ w: 80, h: 80 });
-  const [page, setPage] = useState<"display" | "telemetry" | "logs">("display");
+  const [page, setPage] = useState<"display" | "telemetry" | "logs" | "device">("display");
   const [activeType, setActiveType] = useState<WidgetType | null>(null);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -32,6 +33,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const displayBtnRef = useRef<HTMLButtonElement>(null);
   const telemetryBtnRef = useRef<HTMLButtonElement>(null);
   const logsBtnRef = useRef<HTMLButtonElement>(null);
+  const deviceBtnRef = useRef<HTMLButtonElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
 
   useLayoutEffect(() => {
     const container = tabsRef.current;
-    const btn = page === "display" ? displayBtnRef.current : page === "telemetry" ? telemetryBtnRef.current : logsBtnRef.current;
+    const btn = page === "display" ? displayBtnRef.current : page === "telemetry" ? telemetryBtnRef.current : page === "device" ? deviceBtnRef.current : logsBtnRef.current;
     if (!container || !btn) return;
     const containerRect = container.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
@@ -273,6 +275,15 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             >
               Log Terminal
             </button>
+            <button
+              ref={deviceBtnRef}
+              onClick={() => setPage("device")}
+              className={`pb-1 text-base font-semibold transition-colors duration-200 ${
+                page === "device" ? "text-white" : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              Device
+            </button>
             {indicator.ready && (
               <div
                 className="absolute bottom-0 h-0.5 bg-blue-500"
@@ -320,6 +331,8 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             </>
           ) : page === "telemetry" ? (
             <TelemetryPage />
+          ) : page === "device" ? (
+            <DevicePage />
           ) : (
             <LogTerminalPage />
           )}

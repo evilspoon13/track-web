@@ -1,9 +1,12 @@
 import { v4 as uuidv4 } from "uuid";
+
+export class DeviceNotRegisteredError extends Error {
+  constructor() { super("Device not registered"); }
+}
 import type {
   SavedLayout,
   PlacedWidget,
   FrameParserConfig,
-  DataFieldType,
   WidgetType,
 } from "../types";
 
@@ -16,7 +19,7 @@ interface BackendWidgetInfo {
     can_id: number;
     can_id_label: string;
     signal: string;
-    unit: DataFieldType;
+    unit: string;
     min: number;
     max: number;
     caution_threshold: number;
@@ -35,13 +38,15 @@ export async function authFetch(input: string, init?: RequestInit): Promise<Resp
   }
   const { auth } = await import("../lib/firebase");
   const token = await auth.currentUser?.getIdToken();
-  return fetch(input, {
+  const res = await fetch(input, {
     ...init,
     headers: {
       ...init?.headers,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
+  if (res.status === 403) throw new DeviceNotRegisteredError();
+  return res;
 }
 
 function widgetToBackend(
@@ -56,7 +61,7 @@ function widgetToBackend(
       can_id: parseInt(w.widgetCanId ?? "0x0", 16),
       can_id_label: fpc[w.widgetCanId ?? ""]?.can_id_label ?? "",
       signal: w.widgetSignal ?? "",
-      unit: w.widgetUnit ?? "rpm",
+      unit: w.widgetUnit ?? "",
       min: w.widgetMin ?? 0,
       max: w.widgetMax ?? 100,
       caution_threshold: w.widgetCautionThreshold ?? 0,
