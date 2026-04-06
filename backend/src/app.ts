@@ -29,6 +29,11 @@ app.use("/api/graphics", graphicsRoutes);
 app.use("/api/dbc", dbcRoutes);
 app.use("/api/logs", logsRoutes);
 
+// User-facing device info (behind requireAuth + requireDevice above)
+import * as devicesController from "./modules/devices/devices.controller";
+app.get("/api/device", devicesController.getDevice);
+app.post("/api/device/team-members", devicesController.updateTeamMembers);
+
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   const message = err instanceof Error ? err.message : String(err);
   const stack   = err instanceof Error ? err.stack    : undefined;
