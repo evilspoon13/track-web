@@ -58,9 +58,9 @@ export async function updateScreen(req: Request<{ screenId: string }>, res: Resp
     const screen = req.body as ScreenInfo;
     await graphicsService.saveScreen(req.uid, screenId, screen);
     const driverDisplay = await graphicsService.getDriverDisplay(req.uid);
-    if (driverDisplay === screen.name) {
-      sendConfigToPi(req.deviceId, screen);
-    }
+    // if (driverDisplay === screen.name) {
+    sendConfigToPi(req.deviceId, screen);
+    // }
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ msg: error });
