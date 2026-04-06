@@ -3,6 +3,11 @@ import type { ScreenInfo } from "./graphics.types";
 import * as graphicsService from "./graphics.service";
 import { sendConfigToPi } from "../realtime/realtime.service";
 
+async function pushFullConfigToPi(uid: string, deviceId: string) {
+  const allScreens = await graphicsService.getAllScreens(uid);
+  sendConfigToPi(deviceId, { screens: allScreens });
+}
+
 export async function getScreenNames(req: Request, res: Response) {
   try {
     const screens = await graphicsService.getScreenNames(req.uid);
@@ -57,10 +62,7 @@ export async function updateScreen(req: Request<{ screenId: string }>, res: Resp
     const screenId = req.params.screenId;
     const screen = req.body as ScreenInfo;
     await graphicsService.saveScreen(req.uid, screenId, screen);
-    const driverDisplay = await graphicsService.getDriverDisplay(req.uid);
-    // if (driverDisplay === screen.name) {
-    sendConfigToPi(req.deviceId, screen);
-    // }
+    await pushFullConfigToPi(req.uid, req.deviceId!);
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ msg: error });
@@ -90,7 +92,7 @@ export async function setDriverDisplayHandler(req: Request, res: Response) {
         return;
       }
       await graphicsService.setDriverDisplay(req.uid, screenName);
-      sendConfigToPi(req.deviceId, screen);
+      await pushFullConfigToPi(req.uid, req.deviceId!);
     } else {
       await graphicsService.setDriverDisplay(req.uid, null);
     }

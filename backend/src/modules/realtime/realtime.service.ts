@@ -353,8 +353,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
 }
 
 export function sendConfigToPi(deviceId: string, screenInfo: unknown): boolean {
-  // Keep payload as a JSON string for backwards compatibility with the current Pi handler.
-  return sendMessageToPi(deviceId, { type: "config_update", payload: JSON.stringify(screenInfo) });
+  return sendMessageToPi(deviceId, { type: "config_update", payload: screenInfo });
 }
 
 export function sendMessageToPi(deviceId: string, message: unknown): boolean {

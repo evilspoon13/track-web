@@ -25,6 +25,12 @@ export async function getScreenNames(uid: string): Promise<string[]> {
   return snap.docs.map((d) => d.data().name as string);
 }
 
+export async function getAllScreens(uid: string): Promise<ScreenInfo[]> {
+  const snap = await col(uid).get();
+  if (snap.empty) return [];
+  return snap.docs.map((d) => d.data() as ScreenInfo);
+}
+
 export async function getScreenById(uid: string, name: string): Promise<ScreenInfo | null> {
   const snap = await col(uid).where("name", "==", name).limit(1).get();
   if (snap.empty) return null;
