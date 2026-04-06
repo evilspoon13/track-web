@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Save, Loader2, Copy, Check } from "lucide-react";
+import { authFetch } from "../utils/layoutIO";
 
 interface DeviceInfo {
   device_id: string;
-  team_members: string[];
+  teamMembers?: string[];
+  team_members?: string[];
+  connected?: boolean;
 }
 
 export default function DevicePage() {
@@ -16,11 +19,11 @@ export default function DevicePage() {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    fetch("/api/device")
+    authFetch("/api/device")
       .then((r) => r.json())
       .then((data: DeviceInfo) => {
         setDevice(data);
-        setMembers(data.team_members);
+        setMembers(data.teamMembers ?? data.team_members ?? []);
       })
       .catch(() => setStatus("Failed to load device info"));
   }, []);
@@ -42,7 +45,7 @@ export default function DevicePage() {
     setSaving(true);
     setStatus("");
     try {
-      const res = await fetch("/api/device/team-members", {
+      const res = await authFetch("/api/device/team-members", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ team_members: members }),
@@ -102,6 +105,12 @@ export default function DevicePage() {
                 {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
               </button>
             </div>
+            {device.connected !== undefined && (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <div className={`h-1.5 w-1.5 rounded-full ${device.connected ? "bg-green-400" : "bg-gray-600"}`} />
+                <span className="text-xs text-gray-500">{device.connected ? "Pi online" : "Pi offline"}</span>
+              </div>
+            )}
           </div>
 
           {/* Team Members */}
