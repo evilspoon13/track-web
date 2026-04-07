@@ -36,6 +36,8 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const deviceBtnRef = useRef<HTMLButtonElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
 
+  const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
+
   useEffect(() => {
     const measure = () => {
       if (!containerRef.current) return;
@@ -296,7 +298,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             )}
           </div>
           <div className="absolute right-4 flex items-center gap-3">
-            <div className="relative">
+            {AUTH_ENABLED && <div className="relative">
               <button
                 onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }}
                 className="flex items-center justify-center rounded p-1 text-gray-500 hover:text-gray-200 transition-colors"
@@ -317,6 +319,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
                 </div>
               )}
             </div>
+            }
           </div>
         </div>
 
