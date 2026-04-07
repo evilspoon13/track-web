@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./lib/firebase";
 import { EditorProvider } from "./state/EditorContext";
+import { TelemetryProvider } from "./state/TelemetryContext";
 import EditorLayout from "./EditorLayout";
 import LandingPage from "./components/LandingPage";
 import { listScreens, DeviceNotRegisteredError } from "./utils/layoutIO";
@@ -95,7 +96,9 @@ export default function AppWithAuth() {
 
   return (
     <EditorProvider>
-      <EditorLayout onLogout={() => { signOut(auth); setAppState("loading"); }} />
+      <TelemetryProvider>
+        <EditorLayout onLogout={() => { signOut(auth); setAppState("loading"); }} />
+      </TelemetryProvider>
     </EditorProvider>
   );
 }

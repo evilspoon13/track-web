@@ -1,9 +1,6 @@
-import { useState, useEffect } from "react";
-import { auth } from "../lib/firebase";
 import { useEditorState } from "../state/EditorContext";
+import { useTelemetry } from "../state/TelemetryContext";
 import type { FrameParserConfig, PlacedWidget, ScreenState } from "../types";
-
-const MAX_HISTORY = 30;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -360,46 +357,7 @@ function SmartSignalCard({
 
 export default function TelemetryPage() {
   const { frameParserConfig, screens, driverDisplayScreen } = useEditorState();
-  const [history, setHistory] = useState<Record<string, number[]>>({});
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/client`);
-
-    ws.onopen = () => {
-      setConnected(true);
-      const uid = auth.currentUser?.uid;
-      auth.currentUser?.getIdToken().then((token) => {
-        ws.send(JSON.stringify({ type: "auth", token, client_id: uid ?? "browser" }));
-      });
-    };
-
-    ws.onclose = () => setConnected(false);
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data as string) as {
-          type: string;
-          payload: { signals?: Record<string, number> };
-        };
-        if (msg.type !== "Telemetry") return;
-        const signals = msg.payload?.signals ?? {};
-        setHistory((prev) => {
-          const next = { ...prev };
-          for (const [key, val] of Object.entries(signals)) {
-            const arr = prev[key] ?? [];
-            next[key] = [...arr.slice(-(MAX_HISTORY - 1)), val];
-          }
-          return next;
-        });
-      } catch {
-        // ignore malformed messages
-      }
-    };
-
-    return () => ws.close();
-  }, []);
+  const { signals: history, connected } = useTelemetry();
 
   const signalKeys = Object.keys(history);
   const n = signalKeys.length;

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { EditorProvider } from "./state/EditorContext";
+import { TelemetryProvider } from "./state/TelemetryContext";
 import EditorLayout from "./EditorLayout";
 import LandingPage from "./components/LandingPage";
 
@@ -16,7 +17,9 @@ function AppNoAuth() {
 
   return (
     <EditorProvider>
-      <EditorLayout onLogout={() => {}} />
+      <TelemetryProvider>
+        <EditorLayout onLogout={() => {}} />
+      </TelemetryProvider>
     </EditorProvider>
   );
 }
