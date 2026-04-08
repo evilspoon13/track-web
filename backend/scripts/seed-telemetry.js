@@ -96,11 +96,12 @@ ws.on("open", () => {
   ws.send(JSON.stringify({ type: "heartbeat", device_id: DEVICE_ID }));
 
   telemetryInterval = setInterval(() => {
-    const payload = generatePayload();
+    const signals = generatePayload();
     ws.send(JSON.stringify({
       type: "telemetry",
       device_id: DEVICE_ID,
-      payload,
+      ts: Date.now(),
+      signals,
     }));
   }, INTERVAL_MS);
 

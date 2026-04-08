@@ -55,15 +55,19 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
         if (AUTH_ENABLED) {
           import("../lib/firebase").then(({ auth }) => {
             const user = auth.currentUser;
-            if (!user || ws.readyState !== WebSocket.OPEN) return;
+            if (!user) {
+              console.warn("[telemetry] No currentUser — WS stays unauthenticated");
+              return;
+            }
+            if (ws.readyState !== WebSocket.OPEN) return;
             user.getIdToken().then((token) => {
               if (ws.readyState !== WebSocket.OPEN) return;
               ws.send(JSON.stringify({ type: "auth", token, client_id: user.uid }));
-            }).catch(() => {
-              // ignore auth token fetch failures and continue receiving telemetry
+            }).catch((err) => {
+              console.warn("[telemetry] Failed to get ID token:", err);
             });
-          }).catch(() => {
-            // ignore lazy import failures and continue receiving telemetry
+          }).catch((err) => {
+            console.warn("[telemetry] Failed to import firebase:", err);
           });
         }
       };

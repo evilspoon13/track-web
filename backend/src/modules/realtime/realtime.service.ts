@@ -408,12 +408,10 @@ export async function handleClientMessage(
           connection.lastHeartbeat = Date.now();
           activeClientId = uid;
           return activeClientId;
-        } catch {
-          try {
-            socket.close(1008, "Invalid auth token");
-          } catch {
-            // ignore close failures
-          }
+        } catch (err) {
+          logger.warn("ws", "Client auth failed — continuing without device link", {
+            error: String(err),
+          });
           return activeClientId;
         }
       }
