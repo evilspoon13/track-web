@@ -50,10 +50,24 @@ services:
       - backend
     restart: unless-stopped
 
+  seed:
+    build: ./backend
+    environment:
+      - FIRESTORE_EMULATOR_HOST=firebase-emulator:8080
+      - FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
+    restart: "no"
+    command: >
+      sh -c "node scripts/seed-device.js && node scripts/seed-logs.js"
+
   urls:
     image: alpine
     depends_on:
       - frontend
+      - seed
     restart: "no"
     command: >
       sh -c "echo '' &&
@@ -61,5 +75,7 @@ services:
              echo '  Frontend      http://localhost' &&
              echo '  Backend       http://localhost:3000' &&
              echo '  Emulator UI   http://localhost:4000' &&
+             echo '  =================================' &&
+             echo '  Test login:   test@track.dev' &&
              echo '  =================================' &&
              echo ''"

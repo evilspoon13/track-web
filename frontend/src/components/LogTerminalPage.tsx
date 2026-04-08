@@ -177,52 +177,41 @@ export default function LogTerminalPage() {
     return groups;
   }
 
-  return (
-    <div className="flex flex-1 overflow-hidden bg-gray-950">
-      {/* Left: Live Feed */}
-      <div className="flex flex-col w-1/2 border-r border-gray-800">
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
-          <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LIVE FEED</span>
-          <div className="flex items-center gap-2">
-            <div className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
-            <span className="text-xs font-mono text-gray-600">
-              {connected ? "CONNECTED" : "DISCONNECTED"}
-            </span>
-          </div>
-        </div>
-        <div
-          ref={liveScrollRef}
-          onScroll={handleLiveScroll}
-          className="flex-1 overflow-y-auto px-6 py-4 font-mono text-xs text-green-500 [&::-webkit-scrollbar]:hidden"
-          style={{ scrollbarWidth: "none" }}
-        >
-          {rawMessages.length === 0 && (
-            <div className="py-4 text-xs text-gray-600 text-center">
-              {connected ? "waiting for telemetry..." : "not connected"}
-            </div>
-          )}
-          {rawMessages.map((msg, i) => {
-            const colonIdx = msg.key.indexOf(":");
-            const canIdNum = parseInt(msg.key.slice(0, colonIdx), 10);
-            const signalName = msg.key.slice(colonIdx + 1);
-            const hex = "0x" + canIdNum.toString(16);
-            const frameName = frameParserConfig[hex]?.can_id_label ?? "UNKNOWN";
-            return (
-              <div key={i} className="leading-6 border-b border-gray-900 py-0.5">
-                <span className="text-gray-600">{formatTs(msg.ts)} </span>
-                <span className="text-gray-500">{formatCanId(canIdNum)} </span>
-                <span className="text-gray-400">{"| " + frameName.padEnd(12) + " "}</span>
-                <span className="text-blue-400">{signalName.padEnd(16)}</span>
-                <span className="text-green-500">{" -> " + msg.value.toFixed(2)}</span>
-              </div>
-            );
-          })}
-          <div ref={liveBottomRef} />
-        </div>
-      </div>
+  // --- Resizable divider ---
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [leftPct, setLeftPct] = useState(() => {
+    const saved = localStorage.getItem("log-split-pct");
+    return saved ? Number(saved) : 50;
+  });
+  const draggingRef = useRef(false);
 
-      {/* Right: History */}
-      <div className="flex flex-col w-1/2">
+  const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    let lastPct = 50;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      lastPct = Math.min(80, Math.max(20, ((ev.clientX - rect.left) / rect.width) * 100));
+      setLeftPct(lastPct);
+    };
+
+    const onUp = () => {
+      draggingRef.current = false;
+      localStorage.setItem("log-split-pct", String(lastPct));
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="flex flex-1 overflow-hidden bg-gray-950">
+      {/* Left: History */}
+      <div className="flex flex-col min-w-0 border-r border-gray-800" style={{ width: `${leftPct}%` }}>
         <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
           <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LOG HISTORY</span>
           <div className="flex items-center gap-3">
@@ -320,6 +309,54 @@ export default function LogTerminalPage() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Draggable divider */}
+      <div
+        onMouseDown={onDividerMouseDown}
+        className="w-1 flex-shrink-0 cursor-col-resize bg-gray-800 hover:bg-green-600 transition-colors"
+      />
+
+      {/* Right: Live Feed */}
+      <div className="flex flex-col min-w-0" style={{ width: `${100 - leftPct}%` }}>
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
+          <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LIVE FEED</span>
+          <div className="flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
+            <span className="text-xs font-mono text-gray-600">
+              {connected ? "CONNECTED" : "DISCONNECTED"}
+            </span>
+          </div>
+        </div>
+        <div
+          ref={liveScrollRef}
+          onScroll={handleLiveScroll}
+          className="flex-1 overflow-y-auto px-6 py-4 font-mono text-xs text-green-500 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-900 [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-gray-600"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#374151 #111827" }}
+        >
+          {rawMessages.length === 0 && (
+            <div className="py-4 text-xs text-gray-600 text-center">
+              {connected ? "waiting for telemetry..." : "not connected"}
+            </div>
+          )}
+          {rawMessages.map((msg, i) => {
+            const colonIdx = msg.key.indexOf(":");
+            const canIdNum = parseInt(msg.key.slice(0, colonIdx), 10);
+            const signalName = msg.key.slice(colonIdx + 1);
+            const hex = "0x" + canIdNum.toString(16);
+            const frameName = frameParserConfig[hex]?.can_id_label ?? "UNKNOWN";
+            return (
+              <div key={i} className="leading-6 border-b border-gray-900 py-0.5">
+                <span className="text-gray-600">{formatTs(msg.ts)} </span>
+                <span className="text-gray-500">{formatCanId(canIdNum)} </span>
+                <span className="text-gray-400">{"| " + frameName.padEnd(12) + " "}</span>
+                <span className="text-blue-400">{signalName.padEnd(16)}</span>
+                <span className="text-green-500">{" -> " + msg.value.toFixed(2)}</span>
+              </div>
+            );
+          })}
+          <div ref={liveBottomRef} />
         </div>
       </div>
     </div>
