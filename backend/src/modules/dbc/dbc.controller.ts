@@ -3,7 +3,7 @@ import * as dbcService from "./dbc.service";
 
 export async function getDbc(req: Request, res: Response) {
   try {
-    const config = await dbcService.readDbc(req.uid);
+    const config = await dbcService.readDbc(req.deviceId!);
     if (config === null) {
       res.status(200).json({ frames: {} });
       return;
@@ -16,7 +16,7 @@ export async function getDbc(req: Request, res: Response) {
 
 export async function updateDbc(req: Request, res: Response) {
   try {
-    const result = await dbcService.writeDbc(req.uid, req.body);
+    const result = await dbcService.writeDbc(req.deviceId!, req.body);
     res.status(200).json(result);
   } catch {
     res.status(500).json({ msg: "Internal server error" });
@@ -32,7 +32,7 @@ export async function uploadDbc(req: Request, res: Response) {
     }
     let config;
     try {
-      config = await dbcService.uploadDbc(req.uid, raw);
+      config = await dbcService.uploadDbc(req.deviceId!, raw);
     } catch {
       res.status(400).json({ msg: "Invalid DBC file — could not be parsed." });
       return;

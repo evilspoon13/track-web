@@ -258,7 +258,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
                 page === "display" ? "text-white" : "text-gray-400 hover:text-gray-200"
               }`}
             >
-              Driver Display
+              Screen Editor
             </button>
             <button
               ref={telemetryBtnRef}

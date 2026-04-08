@@ -6,8 +6,8 @@ import { SignalType } from "./dbc.types";
 import type { Signal } from "candied/dist/dbc/Dbc";
 import { Dbc } from "candied";
 
-const docRef = (uid: string) =>
-  db.collection("users").doc(uid).collection("dbc").doc("content");
+const docRef = (deviceId: string) =>
+  db.collection("devices").doc(deviceId).collection("dbc").doc("content");
 
 function signalTypeFromCandied(sig: Signal): SignalType {
   const dt = sig.dataType;
@@ -50,15 +50,15 @@ function parseCandiedToConfig(dbc: Dbc): DbcConfig {
   return { frames };
 }
 
-export async function readDbc(uid: string): Promise<DbcConfig | null> {
-  const snap = await docRef(uid).get();
+export async function readDbc(deviceId: string): Promise<DbcConfig | null> {
+  const snap = await docRef(deviceId).get();
   if (!snap.exists) return null;
   const dbc = new Dbc();
   dbc.load(snap.data()!.raw as string);
   return parseCandiedToConfig(dbc);
 }
 
-export async function writeDbc(uid: string, config: DbcConfig): Promise<ApiMessage> {
+export async function writeDbc(deviceId: string, config: DbcConfig): Promise<ApiMessage> {
   const dbc = new Dbc();
   dbc.description = "DBC file";
   for (const [canIdHex, frame] of Object.entries(config.frames)) {
@@ -77,12 +77,12 @@ export async function writeDbc(uid: string, config: DbcConfig): Promise<ApiMessa
     }
   }
   const raw = dbc.write();
-  await docRef(uid).set({ raw, updatedAt: FieldValue.serverTimestamp() });
+  await docRef(deviceId).set({ raw, updatedAt: FieldValue.serverTimestamp() });
   return { msg: "Wrote DBC" };
 }
 
-export async function uploadDbc(uid: string, raw: string): Promise<DbcConfig> {
-  await docRef(uid).set({ raw, updatedAt: FieldValue.serverTimestamp() });
+export async function uploadDbc(deviceId: string, raw: string): Promise<DbcConfig> {
+  await docRef(deviceId).set({ raw, updatedAt: FieldValue.serverTimestamp() });
   const dbc = new Dbc();
   dbc.load(raw);
   return parseCandiedToConfig(dbc);

@@ -3,48 +3,35 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { ApiMessage } from "../../common/types/api.types";
 import type { ScreenInfo } from "./graphics.types";
 
-const col = (uid: string) =>
-  db.collection("users").doc(uid).collection("screens");
+const col = (deviceId: string) =>
+  db.collection("devices").doc(deviceId).collection("screens");
 
-const settingsRef = (uid: string) =>
-  db.collection("users").doc(uid).collection("settings").doc("display");
-
-export async function getDriverDisplay(uid: string): Promise<string | null> {
-  const snap = await settingsRef(uid).get();
-  if (!snap.exists) return null;
-  return (snap.data()!.driverDisplayScreen as string) ?? null;
-}
-
-export async function setDriverDisplay(uid: string, screenName: string | null): Promise<void> {
-  await settingsRef(uid).set({ driverDisplayScreen: screenName ?? null });
-}
-
-export async function getScreenNames(uid: string): Promise<string[]> {
-  const snap = await col(uid).select("name").get();
+export async function getScreenNames(deviceId: string): Promise<string[]> {
+  const snap = await col(deviceId).select("name").get();
   if (snap.empty) return [];
   return snap.docs.map((d) => d.data().name as string);
 }
 
-export async function getAllScreens(uid: string): Promise<ScreenInfo[]> {
-  const snap = await col(uid).get();
+export async function getAllScreens(deviceId: string): Promise<ScreenInfo[]> {
+  const snap = await col(deviceId).get();
   if (snap.empty) return [];
   return snap.docs.map((d) => d.data() as ScreenInfo);
 }
 
-export async function getScreenById(uid: string, name: string): Promise<ScreenInfo | null> {
-  const snap = await col(uid).where("name", "==", name).limit(1).get();
+export async function getScreenById(deviceId: string, name: string): Promise<ScreenInfo | null> {
+  const snap = await col(deviceId).where("name", "==", name).limit(1).get();
   if (snap.empty) return null;
   return snap.docs[0]!.data() as ScreenInfo;
 }
 
-export async function saveScreen(uid: string, screenId: string, screen: ScreenInfo): Promise<ApiMessage> {
-  await col(uid).doc(encodeURIComponent(screenId))
+export async function saveScreen(deviceId: string, screenId: string, screen: ScreenInfo): Promise<ApiMessage> {
+  await col(deviceId).doc(encodeURIComponent(screenId))
     .set({ ...screen, updatedAt: FieldValue.serverTimestamp() });
   return { msg: "Config Updated" };
 }
 
-export async function deleteScreenById(uid: string, name: string): Promise<ApiMessage> {
-  const snap = await col(uid).where("name", "==", name).limit(1).get();
+export async function deleteScreenById(deviceId: string, name: string): Promise<ApiMessage> {
+  const snap = await col(deviceId).where("name", "==", name).limit(1).get();
   if (snap.empty) return { msg: "fail" };
   await snap.docs[0]!.ref.delete();
   return { msg: "Screen Deleted" };

@@ -135,25 +135,6 @@ export async function deleteScreen(name: string): Promise<void> {
   });
 }
 
-export async function getDriverDisplay(): Promise<string | null> {
-  try {
-    const res = await authFetch("/api/graphics/driver-display");
-    if (!res.ok) return null;
-    const data = await res.json() as { driverDisplayScreen: string | null };
-    return data.driverDisplayScreen;
-  } catch {
-    return null;
-  }
-}
-
-export async function setDriverDisplay(screenName: string | null): Promise<void> {
-  await authFetch("/api/graphics/driver-display", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ screenName }),
-  });
-}
-
 export async function getDbc(): Promise<FrameParserConfig> {
   try {
     const res = await authFetch("/api/dbc");

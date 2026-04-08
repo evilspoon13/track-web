@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { EditorState, EditorAction } from "../types";
 import { editorReducer, createInitialState } from "./editorReducer";
-import { getDbc, getDriverDisplay } from "../utils/layoutIO";
+import { getDbc } from "../utils/layoutIO";
 
 const EditorStateContext = createContext<EditorState | null>(null);
 const EditorDispatchContext = createContext<Dispatch<EditorAction> | null>(null);
@@ -17,16 +17,14 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(editorReducer, null, createInitialState);
 
   useEffect(() => {
-    Promise.all([getDbc(), getDriverDisplay()]).then(([config, driverDisplayScreen]) => {
+    getDbc().then((config) => {
       dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config } });
-      dispatch({ type: "LOAD_DRIVER_DISPLAY", payload: { screenName: driverDisplayScreen } });
     });
   }, []);
 
   useEffect(() => {
     const isDirty =
       state.canIdsDirty ||
-      state.driverDisplayDirty ||
       state.screens.some((s) => s.isDirty);
     if (!isDirty) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -35,7 +33,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [state.canIdsDirty, state.driverDisplayDirty, state.screens]);
+  }, [state.canIdsDirty, state.screens]);
 
   return (
     <EditorStateContext.Provider value={state}>

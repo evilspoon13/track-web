@@ -8,8 +8,6 @@ export function createInitialState(): EditorState {
     activeScreenId: screenId,
     selectedWidgetId: null,
     frameParserConfig: {},
-    driverDisplayScreen: null,
-    driverDisplayDirty: false,
     canIdsDirty: false,
   };
 }
@@ -169,12 +167,6 @@ export function editorReducer(
       return { ...state, screens };
     }
 
-    case "MARK_DRIVER_DISPLAY_CLEAN":
-      return { ...state, driverDisplayDirty: false };
-
-    case "LOAD_DRIVER_DISPLAY":
-      return { ...state, driverDisplayScreen: action.payload.screenName };
-
     case "UPDATE_ORIGINAL_NAME": {
       const screens = state.screens.map((s) =>
         s.id === action.payload.id
@@ -230,13 +222,6 @@ export function editorReducer(
 
     case "MARK_CAN_IDS_CLEAN":
       return { ...state, canIdsDirty: false };
-
-    case "SET_DRIVER_DISPLAY":
-      return {
-        ...state,
-        driverDisplayScreen: action.payload.screenName,
-        driverDisplayDirty: true,
-      };
 
     default:
       return state;

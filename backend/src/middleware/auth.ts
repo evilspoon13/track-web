@@ -12,6 +12,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!header?.startsWith("Bearer ")) {
     if (process.env.AUTH_ENABLED === "false") {
       req.uid = "dev-user";
+      const userSnap = await db.collection("users").doc(req.uid).get();
+      const did = userSnap.exists ? (userSnap.data()?.device_id as string | undefined) : undefined;
+      if (did) req.deviceId = did;
       next();
       return;
     }

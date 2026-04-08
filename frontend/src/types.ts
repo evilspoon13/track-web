@@ -62,8 +62,6 @@ export interface EditorState {
   activeScreenId: string;
   selectedWidgetId: string | null;
   frameParserConfig: FrameParserConfig;
-  driverDisplayScreen: string | null;
-  driverDisplayDirty: boolean;
   canIdsDirty: boolean;
 }
 
@@ -112,12 +110,9 @@ export type EditorAction =
   | { type: "SET_SCREEN_NAME"; payload: { id: string; name: string } }
   | { type: "UPDATE_ORIGINAL_NAME"; payload: { id: string; originalName: string } }
   | { type: "MARK_CLEAN"; payload: { id: string } }
-  | { type: "MARK_DRIVER_DISPLAY_CLEAN" }
   | { type: "LOAD_SCREEN"; payload: SavedLayout }
   | { type: "SET_FRAME_PARSER_CONFIG"; payload: { config: FrameParserConfig } }
   | { type: "ADD_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "UPDATE_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "REMOVE_CAN_FRAME"; payload: { canId: string } }
-  | { type: "SET_DRIVER_DISPLAY"; payload: { screenName: string | null } }
-  | { type: "MARK_CAN_IDS_CLEAN" }
-  | { type: "LOAD_DRIVER_DISPLAY"; payload: { screenName: string | null } };
+  | { type: "MARK_CAN_IDS_CLEAN" };
