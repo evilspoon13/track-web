@@ -10,9 +10,22 @@ import type {
   WidgetType,
   DaySummary,
   LogsResponse,
+  GraphInfo,
+  graphMode,
 } from "../types";
 
-// Backend API shapes (mirrors graphics.types.ts)
+// Backend API shapes (mirrors graphics.types.ts + frame-parser.types.ts)
+interface BackendGraphInfo {
+  mode: string;
+  window_seconds?: number;
+  max_points: number;
+  x_can_id?: number;
+  x_signal?: string;
+  x_unit?: string;
+  x_min?: number;
+  x_max?: number;
+}
+
 interface BackendWidgetInfo {
   type: string;
   alarm: boolean;
@@ -27,6 +40,7 @@ interface BackendWidgetInfo {
     caution_threshold: number;
     critical_threshold: number;
   };
+  graph?: BackendGraphInfo;
 }
 
 interface BackendScreenInfo {
@@ -54,8 +68,8 @@ export async function authFetch(input: string, init?: RequestInit): Promise<Resp
 function widgetToBackend(
   w: PlacedWidget,
   fpc: FrameParserConfig
-): BackendWidgetInfo {
-  return {
+): BackendWidgetInfo | null {
+  const base: BackendWidgetInfo = {
     type: w.type,
     alarm: w.alarm ?? false,
     position: { x: w.col, y: w.row, width: w.cols, height: w.rows },
@@ -70,10 +84,30 @@ function widgetToBackend(
       critical_threshold: w.widgetCriticalThreshold ?? 0,
     },
   };
+
+  if (w.type === "graph" && w.graphConfig) {
+    const gc = w.graphConfig;
+    const graph: BackendGraphInfo = {
+      mode: gc.mode,
+      max_points: gc.max_points,
+    };
+    if (gc.mode === "time_series") {
+      graph.window_seconds = gc.window_seconds ?? 30;
+    } else {
+      graph.x_can_id = gc.x_can_id;
+      graph.x_signal = gc.x_signal;
+      graph.x_unit = gc.x_unit;
+      graph.x_min = gc.x_min;
+      graph.x_max = gc.x_max;
+    }
+    base.graph = graph;
+  }
+
+  return base;
 }
 
 function widgetFromBackend(wi: BackendWidgetInfo): PlacedWidget {
-  return {
+  const w: PlacedWidget = {
     id: uuidv4(),
     type: wi.type as WidgetType,
     col: wi.position.x,
@@ -89,6 +123,23 @@ function widgetFromBackend(wi: BackendWidgetInfo): PlacedWidget {
     widgetCautionThreshold: wi.data.caution_threshold,
     widgetCriticalThreshold: wi.data.critical_threshold,
   };
+
+  if (wi.type === "graph" && wi.graph) {
+    const g = wi.graph;
+    const graphConfig: GraphInfo = {
+      mode: g.mode as graphMode,
+      max_points: g.max_points,
+      window_seconds: g.window_seconds,
+      x_can_id: g.x_can_id,
+      x_signal: g.x_signal,
+      x_unit: g.x_unit,
+      x_min: g.x_min,
+      x_max: g.x_max,
+    };
+    w.graphConfig = graphConfig;
+  }
+
+  return w;
 }
 
 export async function listScreens(): Promise<string[]> {
@@ -122,7 +173,7 @@ export async function saveScreen(
 ): Promise<void> {
   const payload: BackendScreenInfo = {
     name: screen.name,
-    widgets: screen.widgets.map((w) => widgetToBackend(w, frameParserConfig)),
+    widgets: screen.widgets.map((w) => widgetToBackend(w, frameParserConfig)).filter((w): w is BackendWidgetInfo => w !== null),
   };
   await authFetch(`/api/graphics/screens/${encodeURIComponent(screen.name)}`, {
     method: "POST",

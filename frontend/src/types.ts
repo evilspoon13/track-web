@@ -32,6 +32,28 @@ export interface FrameDefinition {
 // key = "0x..." hex string
 export type FrameParserConfig = Record<string, FrameDefinition>;
 
+// Data field types are free strings for now (any unit label the user wants).
+// The union below is kept for future use when we want to enforce specific types again.
+export type DataFieldType = string;
+// export type DataFieldType = "temperature" | "pressure" | "rpm";
+
+// Mirror graphics.types.ts GraphMode
+export type graphMode = "time_series" | "xy"
+
+// graph settings
+export interface GraphInfo {
+    mode: graphMode,
+    window_seconds?: number,
+    max_points: number,
+
+    // XY secondary CAN ID data
+    x_can_id?: number,
+    x_signal?: string,
+    x_unit?: DataFieldType,
+    x_min?: number,
+    x_max?: number
+}
+
 export interface PlacedWidget {
   id: string;
   type: WidgetType;
@@ -47,6 +69,7 @@ export interface PlacedWidget {
   widgetMax?: number;
   widgetCautionThreshold?: number;
   widgetCriticalThreshold?: number;
+  graphConfig?: GraphInfo
 }
 
 export interface ScreenState {
@@ -116,6 +139,7 @@ export type EditorAction =
         widgetMax?: number;
         widgetCautionThreshold?: number;
         widgetCriticalThreshold?: number;
+        graphConfig?: GraphInfo;
       };
     }
   | { type: "CLEAR_SCREEN" }

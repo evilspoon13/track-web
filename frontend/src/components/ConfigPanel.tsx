@@ -2,6 +2,11 @@ import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { allowedSizes } from "../utils/widgetDefaults";
 import { hasCollision } from "../utils/gridHelpers";
 import CanIdConfigurator from "./CanIdConfigurator";
+import type { GraphInfo, graphMode } from "../types";
+
+// Data field types are free strings for now; kept for future re-typed dropdown
+// const DATA_FIELD_TYPES: DataFieldType[] = ["temperature", "pressure", "rpm"];
+
 const SELECT_STYLE = {
   backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
   backgroundPosition: "right 0.5rem center",
@@ -36,10 +41,17 @@ export default function ConfigPanel() {
       widgetMax: number | undefined;
       widgetCautionThreshold: number | undefined;
       widgetCriticalThreshold: number | undefined;
+      graphConfig: GraphInfo | undefined;
     }>
   ) => {
     if (!widget) return;
     dispatch({ type: "UPDATE_WIDGET_DATA", payload: { id: widget.id, ...updates } });
+  };
+
+  const handleGraphConfig = (updates: Partial<GraphInfo>) => {
+    if (!widget) return;
+    const current = widget.graphConfig ?? { mode: "time_series" as graphMode, max_points: 1000 };
+    handleWidgetData({ graphConfig: { ...current, ...updates } });
   };
 
   const selectedFrameSignals = widget?.widgetCanId
@@ -243,6 +255,153 @@ export default function ConfigPanel() {
                 />
               </div>
             </div>
+
+            {/* Graph Config — only shown for graph widgets */}
+            {widget.type === "graph" && (
+              <div className="mb-4">
+                <h4 className="mb-2 border-b border-gray-700 pb-1 text-xs font-semibold text-gray-400">
+                  Graph Settings
+                </h4>
+
+                {/* Mode */}
+                <div className="mb-2">
+                  <label className="mb-1 block text-xs text-gray-500">Mode</label>
+                  <select
+                    value={widget.graphConfig?.mode ?? "time_series"}
+                    onChange={(e) =>
+                      handleGraphConfig({ mode: e.target.value as graphMode })
+                    }
+                    className={selectClass}
+                    style={SELECT_STYLE}
+                  >
+                    <option value="time_series" className="bg-gray-900">Time Series</option>
+                    <option value="xy" className="bg-gray-900">XY</option>
+                  </select>
+                </div>
+
+                {/* Max Points */}
+                <div className="mb-2">
+                  <label className="mb-1 block text-xs text-gray-500">Max Points</label>
+                  <input
+                    type="number"
+                    value={widget.graphConfig?.max_points ?? 1000}
+                    onChange={(e) =>
+                      handleGraphConfig({ max_points: parseInt(e.target.value) || 1000 })
+                    }
+                    className={numberInputClass}
+                  />
+                </div>
+
+                {/* Time Series: window */}
+                {(widget.graphConfig?.mode ?? "time_series") === "time_series" && (
+                  <div className="mb-2">
+                    <label className="mb-1 block text-xs text-gray-500">Window (s)</label>
+                    <input
+                      type="number"
+                      value={widget.graphConfig?.window_seconds ?? 30}
+                      onChange={(e) =>
+                        handleGraphConfig({ window_seconds: parseFloat(e.target.value) || 30 })
+                      }
+                      className={numberInputClass}
+                    />
+                  </div>
+                )}
+
+                {/* XY mode: X-axis settings */}
+                {widget.graphConfig?.mode === "xy" && (
+                  <>
+                    <div className="mb-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-500">X Frame</label>
+                        <select
+                          value={
+                            widget.graphConfig?.x_can_id !== undefined
+                              ? "0x" + widget.graphConfig.x_can_id.toString(16)
+                              : ""
+                          }
+                          onChange={(e) =>
+                            handleGraphConfig({
+                              x_can_id: e.target.value
+                                ? parseInt(e.target.value, 16)
+                                : undefined,
+                            })
+                          }
+                          className={selectClass}
+                          style={SELECT_STYLE}
+                        >
+                          <option value="" className="bg-gray-900">None</option>
+                          {Object.entries(frameParserConfig).map(([id, frame]) => (
+                            <option key={id} value={id} className="bg-gray-900">
+                              {id} ({frame.can_id_label})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-500">X Signal</label>
+                        <select
+                          value={widget.graphConfig?.x_signal ?? ""}
+                          onChange={(e) =>
+                            handleGraphConfig({ x_signal: e.target.value || undefined })
+                          }
+                          disabled={widget.graphConfig?.x_can_id === undefined}
+                          className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-40`}
+                          style={SELECT_STYLE}
+                        >
+                          <option value="" className="bg-gray-900">None</option>
+                          {(widget.graphConfig?.x_can_id !== undefined
+                            ? frameParserConfig["0x" + widget.graphConfig.x_can_id.toString(16)]?.signals ?? []
+                            : []
+                          ).map((sig) => (
+                            <option key={sig.name} value={sig.name} className="bg-gray-900">
+                              {sig.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mb-2">
+                      <label className="mb-1 block text-xs text-gray-500">X Unit</label>
+                      <input
+                        type="text"
+                        value={widget.graphConfig?.x_unit ?? ""}
+                        onChange={(e) =>
+                          handleGraphConfig({ x_unit: e.target.value || undefined })
+                        }
+                        placeholder="e.g. rpm"
+                        className={numberInputClass}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-500">X Min</label>
+                        <input
+                          type="number"
+                          value={widget.graphConfig?.x_min ?? ""}
+                          onChange={(e) =>
+                            handleGraphConfig({ x_min: e.target.value ? parseFloat(e.target.value) : undefined })
+                          }
+                          placeholder="—"
+                          className={numberInputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-500">X Max</label>
+                        <input
+                          type="number"
+                          value={widget.graphConfig?.x_max ?? ""}
+                          onChange={(e) =>
+                            handleGraphConfig({ x_max: e.target.value ? parseFloat(e.target.value) : undefined })
+                          }
+                          placeholder="—"
+                          className={numberInputClass}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
           </>
           )}
