@@ -29,8 +29,8 @@ export default function Navbar() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showDriverDisplayModal, setShowDriverDisplayModal] = useState(false);
-  const [pendingDriverDisplay, setPendingDriverDisplay] = useState<string | null>(null);
+  // const [showDriverDisplayModal, setShowDriverDisplayModal] = useState(false);
+  // const [pendingDriverDisplay, setPendingDriverDisplay] = useState<string | null>(null);
   const [dbcStatus, setDbcStatus] = useState<string>("");
 
   const activeScreen = state.screens.find((s) => s.id === state.activeScreenId);
@@ -107,10 +107,10 @@ export default function Navbar() {
     dispatch({ type: "REMOVE_SCREEN", payload: { id: activeScreen.id } });
   };
 
-  const handleDriverDisplayChange = (value: string) => {
-    setPendingDriverDisplay(value || null);
-    setShowDriverDisplayModal(true);
-  };
+  // const handleDriverDisplayChange = (value: string) => {
+  //   setPendingDriverDisplay(value || null);
+  //   setShowDriverDisplayModal(true);
+  // };
 
   const handleDbcUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,10 +133,10 @@ export default function Navbar() {
     e.target.value = "";
   };
 
-  const handleConfirmDriverDisplay = () => {
-    setShowDriverDisplayModal(false);
-    dispatch({ type: "SET_DRIVER_DISPLAY", payload: { screenName: pendingDriverDisplay } });
-  };
+  // const handleConfirmDriverDisplay = () => {
+  //   setShowDriverDisplayModal(false);
+  //   dispatch({ type: "SET_DRIVER_DISPLAY", payload: { screenName: pendingDriverDisplay } });
+  // };
 
   const saveModalMessage = (() => {
     if (state.driverDisplayDirty && state.driverDisplayScreen && state.canIdsDirty) {
@@ -229,7 +229,7 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* Driver Display Confirmation Modal */}
+      {/* Driver Display Confirmation Modal — disabled until config push to Pi is fixed
       {showDriverDisplayModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
@@ -254,6 +254,7 @@ export default function Navbar() {
           </div>
         </div>
       )}
+      */}
 
       <div className="flex h-full w-72 flex-col border-r border-gray-700 bg-gray-800">
         {/* Header */}
@@ -318,7 +319,7 @@ export default function Navbar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Driver Display Selector */}
+        {/* Driver Display Selector — disabled until config push to Pi is fixed
         <div className="border-t border-gray-700 px-4 pt-4">
           <label className="mb-2 block text-xs font-medium text-gray-400">
             Driver Display
@@ -340,6 +341,7 @@ export default function Navbar() {
             ))}
           </select>
         </div>
+        */}
 
         {/* Action Buttons */}
         <div className="p-4">

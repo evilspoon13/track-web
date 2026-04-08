@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { v4 as uuidv4 } from "uuid";
 import { Settings, LogOut } from "lucide-react";
+import { auth } from "./lib/firebase";
 import { useEditorState, useEditorDispatch } from "./state/EditorContext";
 import Navbar from "./components/Navbar";
 import GridCanvas from "./components/GridCanvas";
@@ -320,6 +321,25 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
               )}
             </div>
             }
+            {auth.currentUser && (
+              <div className="flex items-center gap-2">
+                {auth.currentUser.photoURL ? (
+                  <img
+                    src={auth.currentUser.photoURL}
+                    alt=""
+                    className="h-7 w-7 rounded-full"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                    {(auth.currentUser.displayName || auth.currentUser.email || "?").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="max-w-[120px] truncate text-sm text-gray-300">
+                  {auth.currentUser.displayName || auth.currentUser.email}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
