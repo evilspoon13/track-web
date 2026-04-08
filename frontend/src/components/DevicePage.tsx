@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Save, Loader2, Copy, Check } from "lucide-react";
-import { authFetch } from "../utils/layoutIO";
+import { authFetch, DeviceNotRegisteredError } from "../utils/layoutIO";
 
 interface DeviceInfo {
   device_id: string;
@@ -9,8 +9,11 @@ interface DeviceInfo {
   connected?: boolean;
 }
 
+type LoadState = "loading" | "loaded" | "no_device" | "error";
+
 export default function DevicePage() {
   const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const [members, setMembers] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -24,8 +27,15 @@ export default function DevicePage() {
       .then((data: DeviceInfo) => {
         setDevice(data);
         setMembers(data.teamMembers ?? data.team_members ?? []);
+        setLoadState("loaded");
       })
-      .catch(() => setStatus("Failed to load device info"));
+      .catch((err) => {
+        if (err instanceof DeviceNotRegisteredError) {
+          setLoadState("no_device");
+        } else {
+          setLoadState("error");
+        }
+      });
   }, []);
 
   const handleAdd = () => {
@@ -71,10 +81,37 @@ export default function DevicePage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  if (!device) {
+  if (loadState === "loading") {
     return (
       <div className="flex flex-1 items-center justify-center bg-gray-900">
         <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+      </div>
+    );
+  }
+
+  if (loadState === "no_device") {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-gray-900 p-8">
+        <div className="max-w-md text-center space-y-4">
+          <h2 className="text-xl font-semibold text-white">No Device Linked</h2>
+          <p className="text-sm text-gray-400">
+            Your account isn't linked to a T.R.A.C.K. device yet. To get started, a team
+            member with access to the Pi needs to add your email as a team member on the
+            captive portal.
+          </p>
+          <p className="text-xs text-gray-600">
+            Connect to the Pi's WiFi access point, open the captive portal, go to the
+            Device tab, and add your email to the team members list.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadState === "error" || !device) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-gray-900">
+        <span className="text-sm text-red-400">Failed to load device info</span>
       </div>
     );
   }
