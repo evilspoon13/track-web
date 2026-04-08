@@ -83,6 +83,21 @@ export interface LogsResponse {
   nextCursor: number | null;
 }
 
+export interface DaySummary {
+  date: string;
+  count: number;
+}
+
+export interface DaysResponse {
+  days: DaySummary[];
+}
+
+export interface LiveLogLine {
+  ts: number;
+  key: string;
+  value: number;
+}
+
 export type EditorAction =
   | { type: "ADD_WIDGET"; payload: PlacedWidget }
   | { type: "MOVE_WIDGET"; payload: { id: string; col: number; row: number } }

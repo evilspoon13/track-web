@@ -1,7 +1,7 @@
 import { db } from "../../lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import { readDbc } from "../dbc/dbc.service";
-import type { LogChunkDocument, LogChunkEntry, LogEntry, LogsResponse } from "./logs.types";
+import type { DaySummary, LogChunkDocument, LogChunkEntry, LogEntry, LogsResponse } from "./logs.types";
 
 const ENTRY_SIZE = 24;
 const MAX_ENTRIES_PER_CHUNK = 30_000;
@@ -55,16 +55,35 @@ export async function persistLogBuffer(deviceId: string, session: string, buf: B
   console.log(`[logs] persisted ${raw.length} entries (${Math.ceil(raw.length / MAX_ENTRIES_PER_CHUNK)} chunk(s)) for device=${deviceId} session=${session}`);
 }
 
+export async function getLogDays(deviceId: string): Promise<DaySummary[]> {
+  const col = db.collection("devices").doc(deviceId).collection("logs");
+  const snap = await col.select("startTs", "count").get();
+  const counts = new Map<string, number>();
+  for (const doc of snap.docs) {
+    const data = doc.data() as { startTs: number; count: number };
+    const day = new Date(data.startTs).toISOString().slice(0, 10);
+    counts.set(day, (counts.get(day) ?? 0) + data.count);
+  }
+  return Array.from(counts.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
 export async function getLogs(
   deviceId: string,
   limit: number,
-  beforeTs?: number
+  beforeTs?: number,
+  dateStartMs?: number,
+  dateEndMs?: number
 ): Promise<LogsResponse> {
   const col = db.collection("devices").doc(deviceId).collection("logs");
 
   let baseQuery: FirebaseFirestore.Query = col.orderBy("startTs", "desc");
   if (beforeTs !== undefined) {
     baseQuery = baseQuery.where("startTs", "<", beforeTs);
+  }
+  if (dateEndMs !== undefined) {
+    baseQuery = baseQuery.where("startTs", "<", dateEndMs);
   }
 
   const collected: { ts: number; can_id: number; value: number; session: string }[] = [];
@@ -81,10 +100,12 @@ export async function getLogs(
 
     for (const doc of snap.docs) {
       const chunk = doc.data() as LogChunkDocument;
+      if (dateStartMs !== undefined && chunk.endTs < dateStartMs) continue;
       for (const e of chunk.entries) {
-        if (beforeTs === undefined || e.ts < beforeTs) {
-          collected.push({ ts: e.ts, can_id: e.can_id, value: e.value, session: chunk.session });
-        }
+        if (beforeTs !== undefined && e.ts >= beforeTs) continue;
+        if (dateStartMs !== undefined && e.ts < dateStartMs) continue;
+        if (dateEndMs !== undefined && e.ts >= dateEndMs) continue;
+        collected.push({ ts: e.ts, can_id: e.can_id, value: e.value, session: chunk.session });
       }
     }
 

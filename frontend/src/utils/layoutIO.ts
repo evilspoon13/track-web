@@ -8,6 +8,8 @@ import type {
   PlacedWidget,
   FrameParserConfig,
   WidgetType,
+  DaySummary,
+  LogsResponse,
 } from "../types";
 
 // Backend API shapes (mirrors graphics.types.ts)
@@ -169,5 +171,33 @@ export async function uploadDbc(rawContent: string): Promise<FrameParserConfig |
     return data.frames ?? {};
   } catch {
     return { error: "Upload failed" };
+  }
+}
+
+export async function fetchLogDays(): Promise<DaySummary[]> {
+  try {
+    const res = await authFetch("/api/logs/days");
+    if (!res.ok) return [];
+    const data = await res.json() as { days: DaySummary[] };
+    return data.days ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchLogs(opts: {
+  date?: string;
+  limit?: number;
+  before?: number;
+}): Promise<LogsResponse> {
+  const params = new URLSearchParams({ limit: String(opts.limit ?? 100) });
+  if (opts.date) params.set("date", opts.date);
+  if (opts.before !== undefined) params.set("before", String(opts.before));
+  try {
+    const res = await authFetch(`/api/logs?${params.toString()}`);
+    if (!res.ok) return { entries: [], nextCursor: null };
+    return res.json() as Promise<LogsResponse>;
+  } catch {
+    return { entries: [], nextCursor: null };
   }
 }

@@ -24,3 +24,12 @@ export interface LogsResponse {
   entries: LogEntry[];
   nextCursor: number | null;
 }
+
+export interface DaySummary {
+  date: string;
+  count: number;
+}
+
+export interface DaysResponse {
+  days: DaySummary[];
+}

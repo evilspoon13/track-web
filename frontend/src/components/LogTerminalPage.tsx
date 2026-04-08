@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LogEntry, LogsResponse } from "../types";
-import { authFetch } from "../utils/layoutIO";
+import type { LogEntry, DaySummary } from "../types";
+import { fetchLogDays, fetchLogs } from "../utils/layoutIO";
+import { useTelemetry } from "../state/TelemetryContext";
+import { useEditorState } from "../state/EditorContext";
 
 function formatTs(ts: number): string {
   const d = new Date(ts);
@@ -15,105 +17,310 @@ function formatCanId(canId: number): string {
   return "0x" + canId.toString(16).toUpperCase().padStart(3, "0");
 }
 
-async function fetchLogs(before?: number): Promise<LogsResponse> {
-  const params = new URLSearchParams({ limit: "100" });
-  if (before !== undefined) params.set("before", String(before));
-  const res = await authFetch(`/api/logs?${params.toString()}`);
-  if (!res.ok) return { entries: [], nextCursor: null };
-  return res.json() as Promise<LogsResponse>;
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+interface DayData {
+  entries: LogEntry[];
+  nextCursor: number | null;
+  loading: boolean;
+}
+
+async function downloadExcel(entries: LogEntry[], filename: string) {
+  const XLSX = await import("xlsx");
+
+  const timestamps = [...new Set(entries.map((e) => e.ts))].sort((a, b) => a - b);
+  const signals = [...new Set(entries.map((e) => e.frame_name ?? `0x${e.can_id.toString(16)}`))];
+
+  const lookup = new Map<number, Record<string, number>>();
+  for (const e of entries) {
+    const key = e.frame_name ?? `0x${e.can_id.toString(16)}`;
+    if (!lookup.has(e.ts)) lookup.set(e.ts, {});
+    lookup.get(e.ts)![key] = e.value;
+  }
+
+  const rows = timestamps.map((ts) => {
+    const row: Record<string, string | number> = { timestamp: new Date(ts).toISOString() };
+    for (const sig of signals) {
+      row[sig] = lookup.get(ts)?.[sig] ?? "";
+    }
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Logs");
+  XLSX.writeFile(wb, filename);
 }
 
 export default function LogTerminalPage() {
-  const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [initialLoaded, setInitialLoaded] = useState(false);
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const topSentinelRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // --- Live panel state ---
+  const { rawMessages, connected } = useTelemetry();
+  const { frameParserConfig } = useEditorState();
+  const liveScrollRef = useRef<HTMLDivElement>(null);
+  const liveBottomRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchLogs().then(({ entries: newEntries, nextCursor: nc }) => {
-      if (cancelled) return;
-      setEntries([...newEntries].reverse());
-      setNextCursor(nc);
-      setInitialLoaded(true);
-      setLoading(false);
-    }).catch(() => {
-      if (!cancelled) setLoading(false);
-    });
-    return () => { cancelled = true; };
+    if (isAtBottomRef.current) {
+      liveBottomRef.current?.scrollIntoView({ behavior: "auto" });
+    }
+  }, [rawMessages]);
+
+  const handleLiveScroll = useCallback(() => {
+    const el = liveScrollRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   }, []);
 
-  useEffect(() => {
-    if (initialLoaded) {
-      bottomRef.current?.scrollIntoView();
+  // --- History panel state ---
+  const [days, setDays] = useState<DaySummary[]>([]);
+  const [daysLoading, setDaysLoading] = useState(false);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [dayData, setDayData] = useState<Record<string, DayData>>({});
+  const [dateFilter, setDateFilter] = useState("");
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  const loadDays = useCallback(() => {
+    setDaysLoading(true);
+    fetchLogDays()
+      .then((d) => setDays(d))
+      .finally(() => setDaysLoading(false));
+  }, []);
+
+  useEffect(() => { loadDays(); }, [loadDays]);
+
+  const toggleDay = useCallback((date: string) => {
+    if (expandedDay === date) {
+      setExpandedDay(null);
+      return;
     }
-  }, [initialLoaded]);
+    setExpandedDay(date);
+    if (dayData[date]?.entries.length) return;
 
-  const loadMore = useCallback(() => {
-    if (loading || nextCursor === null) return;
-    setLoading(true);
-    const container = scrollContainerRef.current;
-    const prevScrollHeight = container?.scrollHeight ?? 0;
-    fetchLogs(nextCursor).then(({ entries: older, nextCursor: nc }) => {
-      setEntries((prev) => [...[...older].reverse(), ...prev]);
-      setNextCursor(nc);
-      setLoading(false);
-      requestAnimationFrame(() => {
-        if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+    setDayData((prev) => ({ ...prev, [date]: { entries: [], nextCursor: null, loading: true } }));
+    fetchLogs({ date, limit: 100 }).then(({ entries, nextCursor }) => {
+      setDayData((prev) => ({
+        ...prev,
+        [date]: { entries, nextCursor, loading: false },
+      }));
+    });
+  }, [expandedDay, dayData]);
+
+  const loadMoreForDay = useCallback((date: string) => {
+    const dd = dayData[date];
+    if (!dd || dd.loading || dd.nextCursor === null) return;
+    setDayData((prev) => ({ ...prev, [date]: { ...prev[date]!, loading: true } }));
+    fetchLogs({ date, limit: 100, before: dd.nextCursor }).then(({ entries, nextCursor }) => {
+      setDayData((prev) => {
+        const existing = prev[date]!;
+        return {
+          ...prev,
+          [date]: {
+            entries: [...existing.entries, ...entries],
+            nextCursor,
+            loading: false,
+          },
+        };
       });
-    }).catch(() => setLoading(false));
-  }, [loading, nextCursor]);
+    });
+  }, [dayData]);
 
-  useEffect(() => {
-    if (!initialLoaded || nextCursor === null) return;
-    const sentinel = topSentinelRef.current;
-    if (!sentinel) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry?.isIntersecting) loadMore(); },
-      { root: scrollContainerRef.current, threshold: 0 }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [initialLoaded, nextCursor, loadMore]);
+  const handleDownloadDay = useCallback(async (date: string) => {
+    setDownloading(date);
+    const allEntries: LogEntry[] = [];
+    let cursor: number | undefined;
+    for (;;) {
+      const { entries, nextCursor } = await fetchLogs({ date, limit: 500, before: cursor });
+      allEntries.push(...entries);
+      if (nextCursor === null) break;
+      cursor = nextCursor;
+    }
+    await downloadExcel(allEntries, `logs-${date}.xlsx`);
+    setDownloading(null);
+  }, []);
+
+  const handleDownloadAll = useCallback(async () => {
+    setDownloading("all");
+    const allEntries: LogEntry[] = [];
+    const targetDays = filteredDays.length > 0 ? filteredDays : days;
+    for (const day of targetDays) {
+      let cursor: number | undefined;
+      for (;;) {
+        const { entries, nextCursor } = await fetchLogs({ date: day.date, limit: 500, before: cursor });
+        allEntries.push(...entries);
+        if (nextCursor === null) break;
+        cursor = nextCursor;
+      }
+    }
+    await downloadExcel(allEntries, "logs-all.xlsx");
+    setDownloading(null);
+  }, [days]);
+
+  const filteredDays = dateFilter
+    ? days.filter((d) => d.date === dateFilter)
+    : days;
+
+  // Group entries by session
+  function groupBySession(entries: LogEntry[]): { session: string; entries: LogEntry[] }[] {
+    const groups: { session: string; entries: LogEntry[] }[] = [];
+    let current: { session: string; entries: LogEntry[] } | null = null;
+    for (const e of entries) {
+      if (!current || current.session !== e.session) {
+        current = { session: e.session, entries: [] };
+        groups.push(current);
+      }
+      current.entries.push(e);
+    }
+    return groups;
+  }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-gray-950">
-      {/* Header bar */}
-      <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
-        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">LOG TERMINAL</span>
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-          <span className="text-[10px] font-mono text-gray-600">HIST</span>
+    <div className="flex flex-1 overflow-hidden bg-gray-950">
+      {/* Left: Live Feed */}
+      <div className="flex flex-col w-1/2 border-r border-gray-800">
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
+          <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LIVE FEED</span>
+          <div className="flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
+            <span className="text-xs font-mono text-gray-600">
+              {connected ? "CONNECTED" : "DISCONNECTED"}
+            </span>
+          </div>
+        </div>
+        <div
+          ref={liveScrollRef}
+          onScroll={handleLiveScroll}
+          className="flex-1 overflow-y-auto px-6 py-4 font-mono text-xs text-green-500 [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {rawMessages.length === 0 && (
+            <div className="py-4 text-xs text-gray-600 text-center">
+              {connected ? "waiting for telemetry..." : "not connected"}
+            </div>
+          )}
+          {rawMessages.map((msg, i) => {
+            const colonIdx = msg.key.indexOf(":");
+            const canIdNum = parseInt(msg.key.slice(0, colonIdx), 10);
+            const signalName = msg.key.slice(colonIdx + 1);
+            const hex = "0x" + canIdNum.toString(16);
+            const frameName = frameParserConfig[hex]?.can_id_label ?? "UNKNOWN";
+            return (
+              <div key={i} className="leading-6 border-b border-gray-900 py-0.5">
+                <span className="text-gray-600">{formatTs(msg.ts)} </span>
+                <span className="text-gray-500">{formatCanId(canIdNum)} </span>
+                <span className="text-gray-400">{"| " + frameName.padEnd(12) + " "}</span>
+                <span className="text-blue-400">{signalName.padEnd(16)}</span>
+                <span className="text-green-500">{" -> " + msg.value.toFixed(2)}</span>
+              </div>
+            );
+          })}
+          <div ref={liveBottomRef} />
         </div>
       </div>
 
-      {/* Log output */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-6 py-4 font-mono text-xs text-green-500 [&::-webkit-scrollbar]:hidden"
-        style={{ scrollbarWidth: "none" }}
-      >
-        <div ref={topSentinelRef} />
-        {loading && (
-          <div className="py-1 text-[10px] text-gray-600 text-center">loading...</div>
-        )}
-        {entries.map((entry, i) => (
-          <div key={i} className="leading-6 border-b border-gray-900 py-0.5">
-            <span className="text-gray-600">{formatTs(entry.ts)} </span>
-            <span className="text-gray-500">{formatCanId(entry.can_id)} </span>
-            <span className="text-gray-400">{"| " + (entry.frame_name ?? "UNKNOWN").padEnd(12) + " "}</span>
-            <span className="text-green-500">{"→ " + entry.value.toFixed(2)}</span>
+      {/* Right: History */}
+      <div className="flex flex-col w-1/2">
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
+          <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LOG HISTORY</span>
+          <div className="flex items-center gap-3">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="h-7 bg-gray-900 border border-gray-700 rounded px-2 text-xs font-mono text-gray-400"
+              style={{ colorScheme: "dark" }}
+            />
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter("")}
+                className="text-xs font-mono text-gray-500 hover:text-gray-300"
+              >
+                CLEAR
+              </button>
+            )}
+            <button
+              onClick={handleDownloadAll}
+              disabled={downloading !== null}
+              className="text-xs font-mono text-gray-500 hover:text-gray-300 disabled:opacity-40"
+            >
+              {downloading === "all" ? "EXPORTING..." : "DOWNLOAD ALL"}
+            </button>
           </div>
-        ))}
-        {initialLoaded && entries.length === 0 && (
-          <div className="py-4 text-[10px] text-gray-600 text-center">no logs found</div>
-        )}
-        <div ref={bottomRef} />
+        </div>
+
+        <div
+          className="flex-1 overflow-y-auto font-mono text-sm [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {daysLoading && (
+            <div className="py-4 text-xs text-gray-600 text-center">loading...</div>
+          )}
+          {!daysLoading && filteredDays.length === 0 && (
+            <div className="py-4 text-xs text-gray-600 text-center">no logs found</div>
+          )}
+          {filteredDays.map((day) => {
+            const isExpanded = expandedDay === day.date;
+            const dd = dayData[day.date];
+            return (
+              <div key={day.date} className="border-b border-gray-800">
+                {/* Day header */}
+                <button
+                  onClick={() => toggleDay(day.date)}
+                  className="flex w-full items-center justify-between px-6 py-2 hover:bg-gray-900/50 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600 text-xs">{isExpanded ? "v" : ">"}</span>
+                    <span className="text-sm text-gray-300">{formatDate(day.date)}</span>
+                    <span className="text-xs text-gray-600">({day.count.toLocaleString()})</span>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDownloadDay(day.date); }}
+                    disabled={downloading !== null}
+                    className="text-xs font-mono text-gray-600 hover:text-gray-300 disabled:opacity-40"
+                  >
+                    {downloading === day.date ? "..." : "XLSX"}
+                  </button>
+                </button>
+
+                {/* Expanded entries */}
+                {isExpanded && dd && (
+                  <div className="px-6 pb-3">
+                    {dd.loading && dd.entries.length === 0 && (
+                      <div className="py-2 text-xs text-gray-600 text-center">loading...</div>
+                    )}
+                    {groupBySession(dd.entries).map((group, gi) => (
+                      <div key={gi}>
+                        <div className="py-1 text-xs text-gray-600 border-b border-gray-800/50 mb-1">
+                          --- session: {group.session} ---
+                        </div>
+                        {group.entries.map((entry, ei) => (
+                          <div key={ei} className="leading-6 border-b border-gray-900 py-0.5">
+                            <span className="text-gray-600">{formatTs(entry.ts)} </span>
+                            <span className="text-gray-500">{formatCanId(entry.can_id)} </span>
+                            <span className="text-gray-400">{"| " + (entry.frame_name ?? "UNKNOWN").padEnd(12) + " "}</span>
+                            <span className="text-green-500">{"-> " + entry.value.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    {dd.nextCursor !== null && (
+                      <button
+                        onClick={() => loadMoreForDay(day.date)}
+                        disabled={dd.loading}
+                        className="w-full py-2 text-xs text-gray-600 hover:text-gray-400 disabled:opacity-40 text-center"
+                      >
+                        {dd.loading ? "loading..." : "load more"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
