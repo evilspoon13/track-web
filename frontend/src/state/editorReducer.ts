@@ -193,6 +193,23 @@ export function editorReducer(
       };
     }
 
+    case "LOAD_ALL_SCREENS": {
+      if (action.payload.length === 0) return state;
+      const screens = action.payload.map((s) => ({
+        id: uuidv4(),
+        name: s.name,
+        originalName: s.name,
+        widgets: s.widgets,
+        isDirty: false,
+      }));
+      return {
+        ...state,
+        screens,
+        activeScreenId: screens[0]!.id,
+        selectedWidgetId: null,
+      };
+    }
+
     case "SET_FRAME_PARSER_CONFIG":
       return { ...state, frameParserConfig: action.payload.config };
 

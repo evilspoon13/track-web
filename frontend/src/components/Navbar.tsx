@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import DraggableWidget from "./DraggableWidget";
 import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
-import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc, saveDbc } from "../utils/layoutIO";
+import { saveScreen, deleteScreen, uploadDbc, saveDbc } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
 import { Save, RotateCcw, X, Upload } from "lucide-react";
 
@@ -14,17 +14,9 @@ const widgetTypes: WidgetType[] = [
   "indicator",
 ];
 
-const SELECT_STYLE = {
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
-  backgroundPosition: "right 0.5rem center",
-  backgroundRepeat: "no-repeat",
-  backgroundSize: "1.5em 1.5em",
-};
-
 export default function Navbar() {
   const state = useEditorState();
   const dispatch = useEditorDispatch();
-  const [availableScreens, setAvailableScreens] = useState<string[]>([]);
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
@@ -32,30 +24,6 @@ export default function Navbar() {
   const [dbcStatus, setDbcStatus] = useState<string>("");
 
   const activeScreen = state.screens.find((s) => s.id === state.activeScreenId);
-
-  const refreshScreens = async () => {
-    setAvailableScreens(await listScreens());
-  };
-
-  useEffect(() => {
-    refreshScreens();
-  }, []);
-
-  // Refresh dropdown when screen names change
-  useEffect(() => {
-    refreshScreens();
-  }, [state.screens.map((s) => s.name).join(",")]);
-
-  const handleLoad = async (name: string) => {
-    const existing = state.screens.find((s) => s.name === name);
-    if (existing) {
-      dispatch({ type: "SET_ACTIVE_SCREEN", payload: { id: existing.id } });
-      return;
-    }
-    const screen = await loadScreen(name);
-    if (!screen) return;
-    dispatch({ type: "LOAD_SCREEN", payload: screen });
-  };
 
   const executeSave = async () => {
     if (!activeScreen) return;
@@ -74,7 +42,6 @@ export default function Navbar() {
     }
     setSaveStatus("Saved!");
     setTimeout(() => setSaveStatus(""), 2000);
-    refreshScreens();
   };
 
   const handleSave = () => {
@@ -96,7 +63,6 @@ export default function Navbar() {
     setShowDeleteModal(false);
     if (activeScreen.originalName) {
       await deleteScreen(activeScreen.originalName);
-      refreshScreens();
     }
     dispatch({ type: "REMOVE_SCREEN", payload: { id: activeScreen.id } });
   };
@@ -214,26 +180,6 @@ export default function Navbar() {
             {dbcStatus ? dbcStatus : "Upload .dbc"}
             <input type="file" accept=".dbc" className="hidden" onChange={handleDbcUpload} />
           </label>
-        </div>
-
-        {/* Load Screen Dropdown */}
-        <div className="border-b border-gray-700 p-4">
-          <label className="mb-2 block text-xs font-medium text-gray-400">
-            Load Screen
-          </label>
-          <select
-            value=""
-            onChange={(e) => e.target.value && handleLoad(e.target.value)}
-            className="w-full appearance-none rounded border border-gray-600 bg-gray-900 px-3 py-2 pr-8 text-sm text-white focus:border-blue-500 focus:outline-none"
-            style={SELECT_STYLE}
-          >
-            <option value="">Select saved screen...</option>
-            {availableScreens.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Screen Tabs */}

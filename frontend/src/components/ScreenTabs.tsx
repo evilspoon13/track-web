@@ -133,7 +133,12 @@ export default function ScreenTabs() {
             }`}
           >
             <span className="flex items-center flex-1 truncate">
-              {screen.name}
+              <span className={screen.originalName ? "" : "italic"}>
+                {screen.name}
+              </span>
+              {!screen.originalName && (
+                <span className="ml-1.5 flex-shrink-0 text-[10px] text-gray-400">new</span>
+              )}
               {screen.isDirty && (
                 <span className="ml-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
               )}

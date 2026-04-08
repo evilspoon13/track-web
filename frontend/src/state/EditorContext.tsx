@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { EditorState, EditorAction } from "../types";
 import { editorReducer, createInitialState } from "./editorReducer";
-import { getDbc } from "../utils/layoutIO";
+import { getDbc, listScreens, loadScreen } from "../utils/layoutIO";
 
 const EditorStateContext = createContext<EditorState | null>(null);
 const EditorDispatchContext = createContext<Dispatch<EditorAction> | null>(null);
@@ -19,6 +19,16 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     getDbc().then((config) => {
       dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config } });
+    });
+
+    listScreens().then(async (names) => {
+      if (names.length === 0) return;
+      const screens = (await Promise.all(names.map(loadScreen))).filter(
+        (s): s is NonNullable<typeof s> => s !== null
+      );
+      if (screens.length > 0) {
+        dispatch({ type: "LOAD_ALL_SCREENS", payload: screens });
+      }
     });
   }, []);
 

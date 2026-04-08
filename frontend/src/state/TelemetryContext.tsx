@@ -78,6 +78,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
             type: string;
             payload: { signals?: Record<string, number> };
           };
+          console.log("[TelemetryWS] message:", msg.type, msg.payload);
           if (msg.type !== "Telemetry") return;
           const incoming = msg.payload?.signals ?? {};
           const now = Date.now();

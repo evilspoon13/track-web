@@ -150,6 +150,7 @@ export type EditorAction =
   | { type: "UPDATE_ORIGINAL_NAME"; payload: { id: string; originalName: string } }
   | { type: "MARK_CLEAN"; payload: { id: string } }
   | { type: "LOAD_SCREEN"; payload: SavedLayout }
+  | { type: "LOAD_ALL_SCREENS"; payload: SavedLayout[] }
   | { type: "SET_FRAME_PARSER_CONFIG"; payload: { config: FrameParserConfig } }
   | { type: "ADD_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "UPDATE_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
