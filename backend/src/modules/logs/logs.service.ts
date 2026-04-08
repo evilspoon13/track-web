@@ -1,9 +1,11 @@
 import { db } from "../../lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import { readDbc } from "../dbc/dbc.service";
-import type { LogDocument, LogEntry, LogsResponse } from "./logs.types";
+import type { LogChunkDocument, LogChunkEntry, LogEntry, LogsResponse } from "./logs.types";
 
 const ENTRY_SIZE = 24;
+const MAX_ENTRIES_PER_CHUNK = 30_000;
+const CHUNK_FETCH_SIZE = 5;
 
 interface RawEntry {
   timestamp_ms: number;
@@ -25,58 +27,85 @@ function decodeBinary(buf: Buffer): RawEntry[] {
 }
 
 export async function persistLogBuffer(deviceId: string, session: string, buf: Buffer): Promise<void> {
-  const entries = decodeBinary(buf);
-  if (entries.length === 0) return;
+  const raw = decodeBinary(buf);
+  if (raw.length === 0) return;
+
+  raw.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
 
   const col = db.collection("devices").doc(deviceId).collection("logs");
-  const BATCH_SIZE = 500;
 
-  for (let start = 0; start < entries.length; start += BATCH_SIZE) {
-    const batch = db.batch();
-    const slice = entries.slice(start, start + BATCH_SIZE);
-    for (const e of slice) {
-      batch.set(col.doc(), {
-        ts: e.timestamp_ms,
-        can_id: e.can_id,
-        value: e.value,
-        session,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
+  for (let start = 0; start < raw.length; start += MAX_ENTRIES_PER_CHUNK) {
+    const slice = raw.slice(start, start + MAX_ENTRIES_PER_CHUNK);
+    const entries: LogChunkEntry[] = slice.map((e) => ({
+      ts: e.timestamp_ms,
+      can_id: e.can_id,
+      value: e.value,
+    }));
+
+    await col.doc().set({
+      session,
+      startTs: entries[0]!.ts,
+      endTs: entries[entries.length - 1]!.ts,
+      count: entries.length,
+      entries,
+      createdAt: FieldValue.serverTimestamp(),
+    });
   }
 
-  console.log(`[logs] persisted ${entries.length} entries for device=${deviceId} session=${session}`);
+  console.log(`[logs] persisted ${raw.length} entries (${Math.ceil(raw.length / MAX_ENTRIES_PER_CHUNK)} chunk(s)) for device=${deviceId} session=${session}`);
 }
 
 export async function getLogs(
   deviceId: string,
-  uid: string,
   limit: number,
   beforeTs?: number
 ): Promise<LogsResponse> {
   const col = db.collection("devices").doc(deviceId).collection("logs");
 
-  let q: FirebaseFirestore.Query =
-    beforeTs !== undefined
-      ? col.where("ts", "<", beforeTs).orderBy("ts", "desc").limit(limit + 1)
-      : col.orderBy("ts", "desc").limit(limit + 1);
+  let baseQuery: FirebaseFirestore.Query = col.orderBy("startTs", "desc");
+  if (beforeTs !== undefined) {
+    baseQuery = baseQuery.where("startTs", "<", beforeTs);
+  }
 
-  const snap = await q.get();
-  const docs = snap.docs;
-  const hasMore = docs.length > limit;
-  const page = hasMore ? docs.slice(0, limit) : docs;
+  const collected: { ts: number; can_id: number; value: number; session: string }[] = [];
+  let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | undefined;
 
-  const dbc = await readDbc(uid);
+  while (collected.length <= limit) {
+    let q = baseQuery.limit(CHUNK_FETCH_SIZE);
+    if (lastDoc) {
+      q = q.startAfter(lastDoc);
+    }
 
-  const entries: LogEntry[] = page.map((doc) => {
-    const d = doc.data() as LogDocument;
-    const hex = "0x" + d.can_id.toString(16);
+    const snap = await q.get();
+    if (snap.empty) break;
+
+    for (const doc of snap.docs) {
+      const chunk = doc.data() as LogChunkDocument;
+      for (const e of chunk.entries) {
+        if (beforeTs === undefined || e.ts < beforeTs) {
+          collected.push({ ts: e.ts, can_id: e.can_id, value: e.value, session: chunk.session });
+        }
+      }
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+    if (snap.docs.length < CHUNK_FETCH_SIZE) break;
+  }
+
+  collected.sort((a, b) => b.ts - a.ts);
+
+  const hasMore = collected.length > limit;
+  const page = collected.slice(0, limit);
+
+  const dbc = await readDbc(deviceId);
+
+  const entries: LogEntry[] = page.map((e) => {
+    const hex = "0x" + e.can_id.toString(16);
     const frame_name = dbc?.frames[hex]?.can_id_label ?? null;
-    return { ts: d.ts, can_id: d.can_id, value: d.value, session: d.session, frame_name };
+    return { ts: e.ts, can_id: e.can_id, value: e.value, session: e.session, frame_name };
   });
 
-  const nextCursor = hasMore ? (page[page.length - 1]!.data() as LogDocument).ts : null;
+  const nextCursor = hasMore ? page[page.length - 1]!.ts : null;
 
   return { entries, nextCursor };
 }

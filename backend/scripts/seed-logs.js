@@ -1,5 +1,5 @@
 /**
- * Seed the Firebase emulator with sample log entries for dev-001.
+ * Seed the Firebase emulator with sample log chunk(s) for dev-001.
  *
  * Usage: npm run seed-logs
  */
@@ -18,7 +18,6 @@ if (!getApps().length) {
 
 const db = getFirestore();
 
-// Sample CAN IDs that would match typical FSAE signals
 const SIGNALS = [
   { can_id: 0x100, label: "Motor RPM",      min: 0,    max: 8000 },
   { can_id: 0x101, label: "Motor Temp",      min: 20,   max: 120 },
@@ -30,7 +29,6 @@ const SIGNALS = [
 async function main() {
   const col = db.collection("devices").doc(DEVICE_ID).collection("logs");
   const now = Date.now();
-  const BATCH_SIZE = 500;
 
   const entries = [];
   for (let i = 0; i < ENTRY_COUNT; i++) {
@@ -43,21 +41,19 @@ async function main() {
       ts: now - (ENTRY_COUNT - i) * 500,
       can_id: sig.can_id,
       value: Math.round(value * 100) / 100,
-      session: SESSION,
-      createdAt: FieldValue.serverTimestamp(),
     });
   }
 
-  for (let start = 0; start < entries.length; start += BATCH_SIZE) {
-    const batch = db.batch();
-    const slice = entries.slice(start, start + BATCH_SIZE);
-    for (const e of slice) {
-      batch.set(col.doc(), e);
-    }
-    await batch.commit();
-  }
+  await col.doc().set({
+    session: SESSION,
+    startTs: entries[0].ts,
+    endTs: entries[entries.length - 1].ts,
+    count: entries.length,
+    entries,
+    createdAt: FieldValue.serverTimestamp(),
+  });
 
-  console.log(`Seeded ${ENTRY_COUNT} log entries for device '${DEVICE_ID}' (session: ${SESSION}).`);
+  console.log(`Seeded ${ENTRY_COUNT} entries as 1 chunk for device '${DEVICE_ID}' (session: ${SESSION}).`);
   process.exit(0);
 }
 

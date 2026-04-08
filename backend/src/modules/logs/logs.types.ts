@@ -1,11 +1,22 @@
-export interface LogDocument {
+export interface LogChunkEntry {
+  ts: number;
+  can_id: number;
+  value: number;
+}
+
+export interface LogChunkDocument {
+  session: string;
+  startTs: number;
+  endTs: number;
+  count: number;
+  entries: LogChunkEntry[];
+}
+
+export interface LogEntry {
   ts: number;
   can_id: number;
   value: number;
   session: string;
-}
-
-export interface LogEntry extends LogDocument {
   frame_name: string | null;
 }
 

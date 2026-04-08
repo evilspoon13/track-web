@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "clean": "rimraf dist",
-    "seed-emulator": "FIRESTORE_EMULATOR_HOST=localhost:8080 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 FIREBASE_PROJECT_ID=track-csce483 node scripts/seed-emulator.js",
+    "seed-device": "FIRESTORE_EMULATOR_HOST=localhost:8080 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 FIREBASE_PROJECT_ID=track-csce483 node scripts/seed-device.js",
     "seed-logs": "FIRESTORE_EMULATOR_HOST=localhost:8080 FIREBASE_PROJECT_ID=track-csce483 node scripts/seed-logs.js",
     "seed-telemetry": "node scripts/seed-telemetry.js"
   },

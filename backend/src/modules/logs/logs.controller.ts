@@ -18,7 +18,7 @@ export async function getLogsHandler(req: Request, res: Response) {
     const beforeRaw = req.query.before as string | undefined;
     const beforeTs = beforeRaw !== undefined ? parseInt(beforeRaw, 10) : undefined;
 
-    const result = await logsService.getLogs(deviceId, req.uid, limit, beforeTs);
+    const result = await logsService.getLogs(deviceId, limit, beforeTs);
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ msg: String(error) });
