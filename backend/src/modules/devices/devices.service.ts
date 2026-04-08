@@ -61,6 +61,12 @@ export async function registerDevice(deviceId: string, teamMembers: string[]): P
     }
   }
 
+  // Read current memberUids before overwriting so we can detect removals
+  const existingSnap = await db.collection("devices").doc(deviceId).get();
+  const oldMemberUids: string[] = existingSnap.exists
+    ? (existingSnap.data()?.memberUids ?? [])
+    : [];
+
   // Store the device membership
   await db.collection("devices").doc(deviceId).set(
     {
@@ -72,10 +78,16 @@ export async function registerDevice(deviceId: string, teamMembers: string[]): P
     { merge: true }
   );
 
-  // Overwrite each user's device mapping
+  const newUidSet = new Set(memberUids);
+  const removedUids = oldMemberUids.filter((uid: string) => !newUidSet.has(uid));
+
+  // Overwrite each user's device mapping and clear removed users
   const batch = db.batch();
   for (const uid of memberUids) {
     batch.set(db.collection("users").doc(uid), { device_id: deviceId }, { merge: true });
+  }
+  for (const uid of removedUids) {
+    batch.update(db.collection("users").doc(uid), { device_id: FieldValue.delete() });
   }
   await batch.commit();
 
