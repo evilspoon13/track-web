@@ -1,10 +1,12 @@
 import { v4 as uuidv4 } from "uuid";
+
+export class DeviceNotRegisteredError extends Error {
+  constructor() { super("Device not registered"); }
+}
 import type {
   SavedLayout,
   PlacedWidget,
   FrameParserConfig,
-  FrameDefinition,
-  DataFieldType,
   WidgetType,
   GraphInfo,
   graphMode,
@@ -30,7 +32,7 @@ interface BackendWidgetInfo {
     can_id: number;
     can_id_label: string;
     signal: string;
-    unit: DataFieldType;
+    unit: string;
     min: number;
     max: number;
     caution_threshold: number;
@@ -44,19 +46,21 @@ interface BackendScreenInfo {
   widgets: BackendWidgetInfo[];
 }
 
-async function authFetch(input: string, init?: RequestInit): Promise<Response> {
+export async function authFetch(input: string, init?: RequestInit): Promise<Response> {
   if (import.meta.env.VITE_AUTH_ENABLED === "false") {
     return fetch(input, init);
   }
   const { auth } = await import("../lib/firebase");
   const token = await auth.currentUser?.getIdToken();
-  return fetch(input, {
+  const res = await fetch(input, {
     ...init,
     headers: {
       ...init?.headers,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
+  if (res.status === 403) throw new DeviceNotRegisteredError();
+  return res;
 }
 
 function widgetToBackend(
@@ -167,9 +171,7 @@ export async function saveScreen(
 ): Promise<void> {
   const payload: BackendScreenInfo = {
     name: screen.name,
-    widgets: screen.widgets
-      .map((w) => widgetToBackend(w, frameParserConfig))
-      .filter((w): w is BackendWidgetInfo => w !== null),
+    widgets: screen.widgets.map((w) => widgetToBackend(w, frameParserConfig)).filter((w): w is BackendWidgetInfo => w !== null),
   };
   await authFetch(`/api/graphics/screens/${encodeURIComponent(screen.name)}`, {
     method: "POST",
@@ -184,24 +186,39 @@ export async function deleteScreen(name: string): Promise<void> {
   });
 }
 
-export async function getFrameParserConfig(): Promise<FrameParserConfig> {
+export async function getDbc(): Promise<FrameParserConfig> {
   try {
-    const res = await authFetch("/api/frame-parser");
+    const res = await authFetch("/api/dbc");
     if (res.status === 404) return {};
-    const data = await res.json();
+    const data = await res.json() as { frames: FrameParserConfig };
     return data.frames ?? {};
   } catch {
     return {};
   }
 }
 
-export async function saveCanFrame(
-  canId: string,
-  frame: FrameDefinition
-): Promise<void> {
-  await authFetch("/api/frame-parser", {
+export async function saveDbc(config: FrameParserConfig): Promise<void> {
+  await authFetch("/api/dbc", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ can_id: canId, frameDefinition: frame }),
+    body: JSON.stringify({ frames: config }),
   });
+}
+
+export async function uploadDbc(rawContent: string): Promise<FrameParserConfig | { error: string }> {
+  try {
+    const res = await authFetch("/api/dbc/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw: rawContent }),
+    });
+    if (!res.ok) {
+      const data = await res.json() as { msg?: string };
+      return { error: data.msg ?? "Upload failed" };
+    }
+    const data = await res.json() as { frames: FrameParserConfig };
+    return data.frames ?? {};
+  } catch {
+    return { error: "Upload failed" };
+  }
 }

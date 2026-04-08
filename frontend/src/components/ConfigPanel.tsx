@@ -2,7 +2,7 @@ import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { allowedSizes } from "../utils/widgetDefaults";
 import { hasCollision } from "../utils/gridHelpers";
 import CanIdConfigurator from "./CanIdConfigurator";
-import type { DataFieldType, GraphInfo, graphMode } from "../types";
+import type { GraphInfo, graphMode } from "../types";
 
 // Data field types are free strings for now; kept for future re-typed dropdown
 // const DATA_FIELD_TYPES: DataFieldType[] = ["temperature", "pressure", "rpm"];
@@ -36,7 +36,7 @@ export default function ConfigPanel() {
       alarm: boolean;
       widgetCanId: string | undefined;
       widgetSignal: string | undefined;
-      widgetUnit: DataFieldType | undefined;
+      widgetUnit: string | undefined;
       widgetMin: number | undefined;
       widgetMax: number | undefined;
       widgetCautionThreshold: number | undefined;
@@ -135,9 +135,11 @@ export default function ConfigPanel() {
                   type="text"
                   value={widget.widgetUnit ?? ""}
                   onChange={(e) =>
-                    handleWidgetData({ widgetUnit: e.target.value || undefined })
+                    handleWidgetData({
+                      widgetUnit: e.target.value || undefined,
+                    })
                   }
-                  placeholder="e.g. rpm"
+                  placeholder="e.g. °C, psi, RPM"
                   className={numberInputClass}
                 />
               </div>

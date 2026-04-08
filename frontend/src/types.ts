@@ -5,7 +5,6 @@ export interface WidgetSize {
   rows: number;
 }
 
-// Mirrors frame-parser.types.ts
 export type SignalType =
   | "uint8"
   | "int8"
@@ -65,7 +64,7 @@ export interface PlacedWidget {
   alarm?: boolean;
   widgetCanId?: string;    // hex string like "0x100", references a key in frameParserConfig
   widgetSignal?: string;   // signal name within that CAN frame
-  widgetUnit?: DataFieldType;
+  widgetUnit?: string;
   widgetMin?: number;
   widgetMax?: number;
   widgetCautionThreshold?: number;
@@ -86,13 +85,25 @@ export interface EditorState {
   activeScreenId: string;
   selectedWidgetId: string | null;
   frameParserConfig: FrameParserConfig;
-  driverDisplayScreen: string | null;
-  driverDisplayDirty: boolean;
+  canIdsDirty: boolean;
 }
 
 export interface SavedLayout {
   name: string;
   widgets: PlacedWidget[];
+}
+
+export interface LogEntry {
+  ts: number;
+  can_id: number;
+  value: number;
+  session: string;
+  frame_name: string | null;
+}
+
+export interface LogsResponse {
+  entries: LogEntry[];
+  nextCursor: number | null;
 }
 
 export type EditorAction =
@@ -108,7 +119,7 @@ export type EditorAction =
         alarm?: boolean;
         widgetCanId?: string;
         widgetSignal?: string;
-        widgetUnit?: DataFieldType;
+        widgetUnit?: string;
         widgetMin?: number;
         widgetMax?: number;
         widgetCautionThreshold?: number;
@@ -123,10 +134,9 @@ export type EditorAction =
   | { type: "SET_SCREEN_NAME"; payload: { id: string; name: string } }
   | { type: "UPDATE_ORIGINAL_NAME"; payload: { id: string; originalName: string } }
   | { type: "MARK_CLEAN"; payload: { id: string } }
-  | { type: "MARK_DRIVER_DISPLAY_CLEAN" }
   | { type: "LOAD_SCREEN"; payload: SavedLayout }
   | { type: "SET_FRAME_PARSER_CONFIG"; payload: { config: FrameParserConfig } }
   | { type: "ADD_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "UPDATE_CAN_FRAME"; payload: { canId: string; frame: FrameDefinition } }
   | { type: "REMOVE_CAN_FRAME"; payload: { canId: string } }
-  | { type: "SET_DRIVER_DISPLAY"; payload: { screenName: string | null } };
+  | { type: "MARK_CAN_IDS_CLEAN" };

@@ -1,0 +1,5 @@
+# The repo root `.gitignore` ignores any directory named `logs/`.
+# We still want to track the backend routes module under `src/modules/logs/`.
+!src/modules/logs/
+!src/modules/logs/**
+

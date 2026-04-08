@@ -34,7 +34,7 @@ export interface dataInfo {
     can_id: number,
     can_id_label: string,
     signal: string,
-    unit: DataFieldType,
+    unit: string,
     min: number,
     max: number,
     caution_threshold: number,

@@ -1,13 +1,15 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { v4 as uuidv4 } from "uuid";
-import { Settings, Wifi, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { auth } from "./lib/firebase";
 import { useEditorState, useEditorDispatch } from "./state/EditorContext";
 import Navbar from "./components/Navbar";
 import GridCanvas from "./components/GridCanvas";
 import ConfigPanel from "./components/ConfigPanel";
 import TelemetryPage from "./components/TelemetryPage";
 import LogTerminalPage from "./components/LogTerminalPage";
+import DevicePage from "./components/DevicePage";
 import { defaultSize, allowedSizes } from "./utils/widgetDefaults";
 import { pixelToGrid, hasCollision, clampToGrid } from "./utils/gridHelpers";
 import { GRID_COLS, GRID_ROWS } from "./utils/widgetDefaults";
@@ -24,19 +26,18 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const dispatch = useEditorDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState({ w: 80, h: 80 });
-  const [page, setPage] = useState<"display" | "telemetry" | "logs">("display");
+  const [page, setPage] = useState<"display" | "telemetry" | "logs" | "device">("display");
   const [activeType, setActiveType] = useState<WidgetType | null>(null);
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
-  const [hardwareOnline, setHardwareOnline] = useState(false);
-  const [_piUuid, setPiUuid] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [connectPiOpen, setConnectPiOpen] = useState(false);
-  const [uuidInput, setUuidInput] = useState("");
   const tabsRef = useRef<HTMLDivElement>(null);
   const displayBtnRef = useRef<HTMLButtonElement>(null);
   const telemetryBtnRef = useRef<HTMLButtonElement>(null);
   const logsBtnRef = useRef<HTMLButtonElement>(null);
+  const deviceBtnRef = useRef<HTMLButtonElement>(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+
+  const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
 
   useEffect(() => {
     const measure = () => {
@@ -72,7 +73,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
 
   useLayoutEffect(() => {
     const container = tabsRef.current;
-    const btn = page === "display" ? displayBtnRef.current : page === "telemetry" ? telemetryBtnRef.current : logsBtnRef.current;
+    const btn = page === "display" ? displayBtnRef.current : page === "telemetry" ? telemetryBtnRef.current : page === "device" ? deviceBtnRef.current : logsBtnRef.current;
     if (!container || !btn) return;
     const containerRect = container.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
@@ -257,7 +258,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
                 page === "display" ? "text-white" : "text-gray-400 hover:text-gray-200"
               }`}
             >
-              Driver Display
+              Screen Editor
             </button>
             <button
               ref={telemetryBtnRef}
@@ -277,6 +278,15 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             >
               Log Terminal
             </button>
+            <button
+              ref={deviceBtnRef}
+              onClick={() => setPage("device")}
+              className={`pb-1 text-base font-semibold transition-colors duration-200 ${
+                page === "device" ? "text-white" : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              Device
+            </button>
             {indicator.ready && (
               <div
                 className="absolute bottom-0 h-0.5 bg-blue-500"
@@ -289,39 +299,47 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             )}
           </div>
           <div className="absolute right-4 flex items-center gap-3">
-            <div className={`h-2 w-2 rounded-full ${hardwareOnline ? "bg-green-500" : "bg-red-500"}`} />
-            <span className="text-xs font-mono tracking-widest text-gray-400">
-              {hardwareOnline ? "HARDWARE ONLINE" : "HARDWARE OFFLINE"}
-            </span>
-            <div className="relative">
-              <button
-                onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }}
-                className="flex items-center justify-center rounded p-1 text-gray-500 hover:text-gray-200 transition-colors"
-              >
-                <Settings size={15} />
-              </button>
-              {settingsOpen && (
-                <div className="absolute right-0 top-full mt-2 w-44 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50">
-                  <button
-                    onClick={() => { setConnectPiOpen(true); setSettingsOpen(false); }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 rounded-t-lg"
-                  >
-                    <Wifi size={13} />
-                    Connect to Pi
-                  </button>
-                  <div className="border-t border-gray-800" />
-                  {import.meta.env.VITE_AUTH_ENABLED !== "false" && (
+            {AUTH_ENABLED && auth.currentUser && (
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:ring-2 hover:ring-gray-600"
+                >
+                  {auth.currentUser.photoURL ? (
+                    <img
+                      src={auth.currentUser.photoURL}
+                      alt=""
+                      className="h-7 w-7 rounded-full"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                      {(auth.currentUser.displayName || auth.currentUser.email || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+                {settingsOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50">
+                    <div className="px-4 py-2.5">
+                      <p className="truncate text-sm font-medium text-gray-200">
+                        {auth.currentUser.displayName || auth.currentUser.email}
+                      </p>
+                      {auth.currentUser.displayName && auth.currentUser.email && (
+                        <p className="truncate text-xs text-gray-500">{auth.currentUser.email}</p>
+                      )}
+                    </div>
+                    <div className="border-t border-gray-700" />
                     <button
                       onClick={() => { onLogout(); setSettingsOpen(false); }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 rounded-b-lg"
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 first:rounded-t-none last:rounded-b-lg"
                     >
                       <LogOut size={13} />
                       Logout
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -336,6 +354,8 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             </>
           ) : page === "telemetry" ? (
             <TelemetryPage />
+          ) : page === "device" ? (
+            <DevicePage />
           ) : (
             <LogTerminalPage />
           )}
@@ -351,42 +371,6 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
         {previewWidget}
       </DragOverlay>
 
-      {connectPiOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-96 rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
-            <h2 className="mb-1 text-sm font-mono tracking-widest text-gray-300">CONNECT TO PI</h2>
-            <p className="mb-5 text-xs text-gray-500">Enter the UUID generated by your Raspberry Pi.</p>
-            <input
-              className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm font-mono text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none"
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              value={uuidInput}
-              onChange={(e) => setUuidInput(e.target.value)}
-            />
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => { setConnectPiOpen(false); setUuidInput(""); }}
-                className="rounded px-4 py-2 text-sm text-gray-400 hover:text-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (uuidInput.trim()) {
-                    setPiUuid(uuidInput.trim());
-                    setHardwareOnline(true);
-                    setConnectPiOpen(false);
-                    setUuidInput("");
-                  }
-                }}
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-40"
-                disabled={!uuidInput.trim()}
-              >
-                Connect
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </DndContext>
     </>
   );

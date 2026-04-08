@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import DraggableWidget from "./DraggableWidget";
 import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
-import { listScreens, loadScreen, saveScreen, deleteScreen } from "../utils/layoutIO";
+import { listScreens, loadScreen, saveScreen, deleteScreen, uploadDbc, saveDbc } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
 import { Save, RotateCcw, X, Upload } from "lucide-react";
 
@@ -29,8 +29,6 @@ export default function Navbar() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showDriverDisplayModal, setShowDriverDisplayModal] = useState(false);
-  const [pendingDriverDisplay, setPendingDriverDisplay] = useState<string | null>(null);
   const [dbcStatus, setDbcStatus] = useState<string>("");
 
   const activeScreen = state.screens.find((s) => s.id === state.activeScreenId);
@@ -70,8 +68,9 @@ export default function Navbar() {
       payload: { id: activeScreen.id, originalName: activeScreen.name },
     });
     dispatch({ type: "MARK_CLEAN", payload: { id: activeScreen.id } });
-    if (state.driverDisplayDirty) {
-      dispatch({ type: "MARK_DRIVER_DISPLAY_CLEAN" });
+    if (state.canIdsDirty) {
+      await saveDbc(state.frameParserConfig);
+      dispatch({ type: "MARK_CAN_IDS_CLEAN" });
     }
     setSaveStatus("Saved!");
     setTimeout(() => setSaveStatus(""), 2000);
@@ -102,31 +101,29 @@ export default function Navbar() {
     dispatch({ type: "REMOVE_SCREEN", payload: { id: activeScreen.id } });
   };
 
-  const handleDriverDisplayChange = (value: string) => {
-    setPendingDriverDisplay(value || null);
-    setShowDriverDisplayModal(true);
-  };
-
   const handleDbcUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.name.endsWith(".dbc")) {
+      setDbcStatus("Error: must be a .dbc file");
+      e.target.value = "";
+      return;
+    }
     const content = await file.text();
-    await fetch("/api/dbc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    });
+    const result = await uploadDbc(content);
+    if ("error" in result) {
+      setDbcStatus(`Error: ${result.error}`);
+      e.target.value = "";
+      return;
+    }
+    dispatch({ type: "SET_FRAME_PARSER_CONFIG", payload: { config: result } });
+    dispatch({ type: "MARK_CAN_IDS_CLEAN" });
     setDbcStatus(file.name);
     e.target.value = "";
   };
 
-  const handleConfirmDriverDisplay = () => {
-    setShowDriverDisplayModal(false);
-    dispatch({ type: "SET_DRIVER_DISPLAY", payload: { screenName: pendingDriverDisplay } });
-  };
-
-  const saveModalMessage = state.driverDisplayDirty && state.driverDisplayScreen
-    ? `This will save all screen configurations and update the Driver Display to "${state.driverDisplayScreen}".`
+  const saveModalMessage = state.canIdsDirty
+    ? "This will save the current screen configuration and CAN ID definitions."
     : "This will save the current screen configuration.";
 
   return (
@@ -207,32 +204,6 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* Driver Display Confirmation Modal */}
-      {showDriverDisplayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
-            <h2 className="mb-4 text-xl font-bold text-white">Change Driver Display?</h2>
-            <p className="mb-8 text-gray-300">
-              Are you sure? Changing the driver display will update what the driver sees. This will take effect when you save.
-            </p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowDriverDisplayModal(false)}
-                className="flex-1 rounded bg-gray-700 px-6 py-4 text-lg font-medium text-white hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDriverDisplay}
-                className="flex-1 rounded bg-orange-600 px-6 py-4 text-lg font-medium text-white hover:bg-orange-500"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex h-full w-72 flex-col border-r border-gray-700 bg-gray-800">
         {/* Header */}
         {/* DBC Upload */}
@@ -296,29 +267,6 @@ export default function Navbar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Driver Display Selector */}
-        <div className="border-t border-gray-700 px-4 pt-4">
-          <label className="mb-2 block text-xs font-medium text-gray-400">
-            Driver Display
-            {state.driverDisplayDirty && (
-              <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-orange-500 align-middle" />
-            )}
-          </label>
-          <select
-            value={state.driverDisplayScreen ?? ""}
-            onChange={(e) => handleDriverDisplayChange(e.target.value)}
-            className="w-full appearance-none rounded border border-gray-600 bg-gray-900 px-3 py-2 pr-8 text-sm text-white focus:border-blue-500 focus:outline-none"
-            style={SELECT_STYLE}
-          >
-            <option value="">None</option>
-            {state.screens.map((s) => (
-              <option key={s.id} value={s.name}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Action Buttons */}
         <div className="p-4">
           <div className="flex gap-2">
@@ -326,7 +274,7 @@ export default function Navbar() {
             <button
               onClick={handleSave}
               className={`relative flex flex-1 flex-col items-center justify-center gap-1 rounded py-3 transition-colors duration-200 ${
-                activeScreen?.isDirty || state.driverDisplayDirty
+                activeScreen?.isDirty || state.canIdsDirty
                   ? "bg-gray-700 hover:bg-orange-700"
                   : "bg-gray-700 hover:bg-blue-700"
               }`}
@@ -336,7 +284,7 @@ export default function Navbar() {
               <span className="text-xs text-white">
                 {saveStatus || "Save"}
               </span>
-              {(activeScreen?.isDirty || state.driverDisplayDirty) && (
+              {(activeScreen?.isDirty || state.canIdsDirty) && (
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-orange-500" />
               )}
             </button>

@@ -29,6 +29,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+backend/data/
 
 # KiCad
 *.bak
@@ -49,4 +50,6 @@ CLAUDE.md
 .claude
 .mcp.json
 .playwright-mcp
+
 frontend/dist/
+backend/dist/

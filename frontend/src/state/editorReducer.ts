@@ -8,8 +8,7 @@ export function createInitialState(): EditorState {
     activeScreenId: screenId,
     selectedWidgetId: null,
     frameParserConfig: {},
-    driverDisplayScreen: null,
-    driverDisplayDirty: false,
+    canIdsDirty: false,
   };
 }
 
@@ -168,9 +167,6 @@ export function editorReducer(
       return { ...state, screens };
     }
 
-    case "MARK_DRIVER_DISPLAY_CLEAN":
-      return { ...state, driverDisplayDirty: false };
-
     case "UPDATE_ORIGINAL_NAME": {
       const screens = state.screens.map((s) =>
         s.id === action.payload.id
@@ -205,6 +201,7 @@ export function editorReducer(
       return {
         ...state,
         frameParserConfig: { ...state.frameParserConfig, [canId]: frame },
+        canIdsDirty: true,
       };
     }
 
@@ -213,21 +210,18 @@ export function editorReducer(
       return {
         ...state,
         frameParserConfig: { ...state.frameParserConfig, [canId]: frame },
+        canIdsDirty: true,
       };
     }
 
     case "REMOVE_CAN_FRAME": {
       const next = { ...state.frameParserConfig };
       delete next[action.payload.canId];
-      return { ...state, frameParserConfig: next };
+      return { ...state, frameParserConfig: next, canIdsDirty: true };
     }
 
-    case "SET_DRIVER_DISPLAY":
-      return {
-        ...state,
-        driverDisplayScreen: action.payload.screenName,
-        driverDisplayDirty: true,
-      };
+    case "MARK_CAN_IDS_CLEAN":
+      return { ...state, canIdsDirty: false };
 
     default:
       return state;
