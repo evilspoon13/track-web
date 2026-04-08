@@ -10,6 +10,7 @@ T.R.A.C.K. (Telemetry Rendering And Capture Kit) is the FSAE Electric team's rac
 | [user-flows.md](user-flows.md) | Mermaid flowcharts of key user journeys (auth, drag-drop, save, DBC upload, etc.) |
 | [data-flows.md](data-flows.md) | Mermaid sequence diagrams for data movement — state, API calls, WebSocket, log pagination |
 | [components.md](components.md) | Reference for the 8 key components: purpose, state consumed, actions dispatched, side-effects |
+| [data-model.md](data-model.md) | Firestore schema — all collections, subcollections, and document fields |
 
 ## Quick Start
 
@@ -36,3 +37,10 @@ Set `VITE_AUTH_ENABLED=false` in `.env.local` to bypass Firebase auth during loc
 ```
 
 The frontend saves screen configs and CAN frame definitions to the backend. The backend persists them to Firestore and pushes the new layout to the Pi over a persistent WebSocket. The Pi reloads the running display process immediately.
+
+## Deployment
+
+| App | Fly app name | Method |
+|-----|-------------|--------|
+| Backend | `track-web` | Auto-deploys on push to `main` via Fly GitHub integration |
+| Frontend | `track-web-frontend` | Manual: `cd frontend && fly deploy` |

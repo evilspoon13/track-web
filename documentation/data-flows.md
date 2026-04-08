@@ -154,31 +154,80 @@ flowchart TD
 
 ---
 
-## 5. Log Pagination Flow
+## 5. Log Viewer Flow
 
-`LogTerminalPage` loads entries from newest to oldest. As the user scrolls up, older entries are fetched and prepended.
+`LogTerminalPage` is a resizable split-panel: history (left) and live feed (right). The divider is draggable, and the split percentage is persisted in `localStorage` under `log-split-pct`.
+
+### 5a. History Panel
+
+On mount, day summaries are fetched. The user expands a day to load its entries, then clicks "load more" to paginate.
 
 ```mermaid
 sequenceDiagram
     participant LT as LogTerminalPage
     participant API as Backend API /api/logs
-    participant IO as IntersectionObserver
 
-    LT->>API: GET /api/logs?limit=100
+    LT->>API: fetchLogDays()
+    API-->>LT: DaySummary[] (date + count per day)
+    LT->>LT: render day list with entry counts
+
+    Note over LT: user clicks a day row
+    LT->>API: fetchLogs({ date, limit: 100 })
     API-->>LT: { entries: LogEntry[], nextCursor: number | null }
-    LT->>LT: render entries newest-at-bottom
-    LT->>IO: observe topSentinel element
+    LT->>LT: render entries grouped by session
 
-    loop user scrolls toward top
-        IO->>LT: topSentinel enters viewport
-        LT->>API: GET /api/logs?limit=100&before={cursor}
+    loop user clicks "load more" button
+        LT->>API: fetchLogs({ date, limit: 100, before: nextCursor })
         API-->>LT: { entries: older entries, nextCursor }
-        LT->>LT: prepend older entries to list
-        LT->>LT: adjust scrollTop to keep current view stable
+        LT->>LT: append older entries to day's list
         alt nextCursor is null
-            LT->>IO: disconnect observer (no more data)
+            LT->>LT: hide "load more" button (no more data)
         end
     end
+```
+
+### 5b. Live Feed Panel
+
+The right panel streams live telemetry via the existing `useTelemetry()` hook and auto-scrolls to the bottom unless the user has scrolled up.
+
+```mermaid
+sequenceDiagram
+    participant LT as LogTerminalPage
+    participant TH as useTelemetry() hook
+    participant WS as WebSocket /ws/client
+
+    TH->>WS: subscribe (managed by TelemetryContext)
+    loop CAN data arriving
+        WS-->>TH: raw message { key, value, ts }
+        TH-->>LT: rawMessages array updated
+        LT->>LT: render new line with CAN ID, frame name, signal, value
+        alt user has not scrolled up
+            LT->>LT: auto-scroll to bottom
+        end
+    end
+```
+
+### 5c. XLSX Export
+
+Export fetches all pages for the target day(s), pivots entries into a timestamp-by-signal grid, and writes an Excel file via the `xlsx` library.
+
+```mermaid
+sequenceDiagram
+    participant LT as LogTerminalPage
+    participant API as Backend API /api/logs
+    participant XL as xlsx library
+
+    Note over LT: user clicks "XLSX" (per-day) or "DOWNLOAD ALL"
+
+    loop for each target day
+        loop paginate until exhausted
+            LT->>API: fetchLogs({ date, limit: 500, before: cursor })
+            API-->>LT: { entries, nextCursor }
+        end
+    end
+
+    LT->>XL: pivot entries into rows (timestamp × signal columns)
+    XL-->>LT: write .xlsx file to disk
 ```
 
 **LogEntry shape:**

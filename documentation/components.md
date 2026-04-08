@@ -187,24 +187,47 @@ Eight components make up the core of the editor. Each entry covers purpose, file
 
 ## LogTerminalPage
 
-**Purpose:** Paginated browser for historical telemetry log entries uploaded by the Pi. Supports infinite scroll — older entries are loaded as the user scrolls to the top.
+**Purpose:** Resizable split-panel log viewer. History panel on the left, live telemetry feed on the right, separated by a draggable divider. Supports day-based log browsing with session grouping and XLSX export.
 
 **Location:** `src/components/LogTerminalPage.tsx`
 
-**State consumed:** None from editor context (self-contained).
+**State consumed:**
+- `useTelemetry()` — `rawMessages` (live signal stream) and `connected` (WebSocket status)
+- `useEditorState()` — `frameParserConfig` to resolve CAN IDs to human-readable frame names in the live feed
 
 **Local state:**
-- `entries: LogEntry[]` — loaded log entries (newest at bottom)
-- `cursor: number | null` — pagination cursor for the next `before=` request
-- `loading: boolean` — prevents duplicate fetches
+- `days: DaySummary[]` — list of available log days fetched on mount
+- `expandedDay: string | null` — which day is currently expanded in the history panel
+- `dayData: Record<string, DayData>` — per-day log entries, pagination cursor, and loading flag
+- `dateFilter: string` — date input value used to filter the day list
+- `downloading: string | null` — tracks which day (or `"all"`) is currently exporting
+- `leftPct: number` — left panel width percentage, initialized from `localStorage("log-split-pct")` (default 50)
+
+**Layout:**
+- Two panels in a horizontal flex container with a 4 px draggable divider between them
+- Divider width is clamped between 20% and 80%; final position is persisted to `localStorage` under the key `log-split-pct` on mouse-up
+- Left panel (history): hidden scrollbar, day-based accordion with session grouping
+- Right panel (live feed): themed scrollbar (dark gray track and thumb, visible on hover)
+
+**History panel features:**
+- Header contains a date filter input and a "DOWNLOAD ALL" button
+- Each day row shows a formatted date, entry count, and an XLSX download button
+- Clicking a day expands it and fetches the first 100 entries via `fetchLogs({ date, limit: 100 })`
+- Entries are grouped by `session` field with a separator between groups
+- A "load more" button at the bottom of an expanded day fetches the next page via cursor
+
+**Live feed panel features:**
+- Header shows a connection indicator dot (green/red) and status label
+- Renders `rawMessages` from `useTelemetry()`, resolving CAN IDs to frame names via `frameParserConfig`
+- Auto-scrolls to the bottom when the user is already near the bottom (`isAtBottomRef` threshold: 40 px)
 
 **Side-effects:**
-- Fetches `GET /api/logs?limit=100` on mount
-- `IntersectionObserver` watches a sentinel element at the top of the list
-- When the sentinel enters the viewport, fetches `GET /api/logs?limit=100&before={cursor}`
-- Prepends older entries and adjusts `scrollTop` to prevent jump
-- Disconnects the observer when `cursor` is `null` (no more data)
+- Fetches day list via `fetchLogDays()` on mount
+- Reads `localStorage("log-split-pct")` on mount to restore panel width
+- Writes `localStorage("log-split-pct")` on divider mouse-up
+- Attaches temporary `mousemove`/`mouseup` listeners on `document` during divider drag
 
-**API calls:**
-- `GET /api/logs` — initial load
-- `GET /api/logs?before={cursor}` — load more (older entries)
+**API calls (via layoutIO.ts):**
+- `fetchLogDays()` — list available log days with entry counts
+- `fetchLogs({ date, limit, before? })` — paginated log entries for a given day
+- XLSX export iterates all pages for a day (or all days) using `fetchLogs` in a loop, then writes via the `xlsx` library
