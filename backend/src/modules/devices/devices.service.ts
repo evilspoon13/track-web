@@ -3,7 +3,6 @@ import { adminAuth, db } from "../../lib/firebaseAdmin";
 
 export async function registerDeviceHeartbeat(deviceId: string, hostname?: string): Promise<void> {
   await db.collection("devices").doc(deviceId).set({
-    uuid: deviceId,
     ...(hostname ? { hostname } : {}),
     lastSeen: FieldValue.serverTimestamp(),
     connected: true,
