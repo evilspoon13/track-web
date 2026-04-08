@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { v4 as uuidv4 } from "uuid";
-import { Settings, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { auth } from "./lib/firebase";
 import { useEditorState, useEditorDispatch } from "./state/EditorContext";
 import Navbar from "./components/Navbar";
@@ -299,45 +299,45 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
             )}
           </div>
           <div className="absolute right-4 flex items-center gap-3">
-            {AUTH_ENABLED && <div className="relative">
-              <button
-                onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }}
-                className="flex items-center justify-center rounded p-1 text-gray-500 hover:text-gray-200 transition-colors"
-              >
-                <Settings size={15} />
-              </button>
-              {settingsOpen && (
-                <div className="absolute right-0 top-full mt-2 w-44 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50">
-                  {import.meta.env.VITE_AUTH_ENABLED !== "false" && (
+            {AUTH_ENABLED && auth.currentUser && (
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSettingsOpen((o) => !o); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:ring-2 hover:ring-gray-600"
+                >
+                  {auth.currentUser.photoURL ? (
+                    <img
+                      src={auth.currentUser.photoURL}
+                      alt=""
+                      className="h-7 w-7 rounded-full"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                      {(auth.currentUser.displayName || auth.currentUser.email || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+                {settingsOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50">
+                    <div className="px-4 py-2.5">
+                      <p className="truncate text-sm font-medium text-gray-200">
+                        {auth.currentUser.displayName || auth.currentUser.email}
+                      </p>
+                      {auth.currentUser.displayName && auth.currentUser.email && (
+                        <p className="truncate text-xs text-gray-500">{auth.currentUser.email}</p>
+                      )}
+                    </div>
+                    <div className="border-t border-gray-700" />
                     <button
                       onClick={() => { onLogout(); setSettingsOpen(false); }}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 rounded-lg"
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 first:rounded-t-none last:rounded-b-lg"
                     >
                       <LogOut size={13} />
                       Logout
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-            }
-            {auth.currentUser && (
-              <div className="flex items-center gap-2">
-                {auth.currentUser.photoURL ? (
-                  <img
-                    src={auth.currentUser.photoURL}
-                    alt=""
-                    className="h-7 w-7 rounded-full"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-                    {(auth.currentUser.displayName || auth.currentUser.email || "?").charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="max-w-[120px] truncate text-sm text-gray-300">
-                  {auth.currentUser.displayName || auth.currentUser.email}
-                </span>
               </div>
             )}
           </div>
