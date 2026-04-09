@@ -2,18 +2,8 @@ import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { allowedSizes } from "../utils/widgetDefaults";
 import { hasCollision } from "../utils/gridHelpers";
 import CanIdConfigurator from "./CanIdConfigurator";
+import AnimatedSelect from "./AnimatedSelect";
 import type { GraphInfo, graphMode } from "../types";
-
-// Data field types are free strings for now; kept for future re-typed dropdown
-// const DATA_FIELD_TYPES: DataFieldType[] = ["temperature", "pressure", "rpm"];
-
-const SELECT_STYLE = {
-  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-  backgroundPosition: "right 0.5rem center",
-  backgroundRepeat: "no-repeat",
-  backgroundSize: "1.5em 1.5em",
-  paddingRight: "2.5rem",
-};
 
 export default function ConfigPanel() {
   const state = useEditorState();
@@ -58,9 +48,6 @@ export default function ConfigPanel() {
     ? (frameParserConfig[widget.widgetCanId]?.signals ?? [])
     : [];
 
-  const selectClass =
-    "w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1.5 text-xs text-white focus:border-gray-500 focus:outline-none";
-
   const numberInputClass =
     "w-full rounded border border-gray-700 bg-transparent px-2 py-1.5 text-xs text-white focus:border-gray-500 focus:outline-none";
 
@@ -87,43 +74,39 @@ export default function ConfigPanel() {
             <div className="mb-3 grid grid-cols-2 gap-2">
               <div>
                 <label className="mb-1 block text-xs text-gray-500">Frame</label>
-                <select
+                <AnimatedSelect
                   value={widget.widgetCanId ?? ""}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     handleWidgetData({
-                      widgetCanId: e.target.value || undefined,
+                      widgetCanId: v || undefined,
                       widgetSignal: undefined,
                     })
                   }
-                  className={selectClass}
-                  style={SELECT_STYLE}
-                >
-                  <option value="" className="bg-gray-900">None</option>
-                  {Object.entries(frameParserConfig).map(([id, frame]) => (
-                    <option key={id} value={id} className="bg-gray-900">
-                      {id} ({frame.can_id_label})
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "None" },
+                    ...Object.entries(frameParserConfig).map(([id, frame]) => ({
+                      value: id,
+                      label: `${id} (${frame.can_id_label})`,
+                    })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-gray-500">Signal</label>
-                <select
+                <AnimatedSelect
                   value={widget.widgetSignal ?? ""}
-                  onChange={(e) =>
-                    handleWidgetData({ widgetSignal: e.target.value || undefined })
+                  onChange={(v) =>
+                    handleWidgetData({ widgetSignal: v || undefined })
                   }
                   disabled={!widget.widgetCanId}
-                  className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-40`}
-                  style={SELECT_STYLE}
-                >
-                  <option value="" className="bg-gray-900">None</option>
-                  {selectedFrameSignals.map((sig) => (
-                    <option key={sig.name} value={sig.name} className="bg-gray-900">
-                      {sig.name}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "None" },
+                    ...selectedFrameSignals.map((sig) => ({
+                      value: sig.name,
+                      label: sig.name,
+                    })),
+                  ]}
+                />
               </div>
             </div>
 
@@ -146,27 +129,22 @@ export default function ConfigPanel() {
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <label className="mb-1 block text-xs text-gray-500">Size</label>
-                  <select
+                  <AnimatedSelect
                     value={`${widget.cols}x${widget.rows}`}
-                    onChange={(e) => {
-                      const [c, r] = e.target.value.split("x").map(Number);
+                    onChange={(v) => {
+                      const [c, r] = v.split("x").map(Number);
                       handleResize(c!, r!);
                     }}
-                    className={selectClass}
-                    style={{ ...SELECT_STYLE, paddingRight: "1.5rem" }}
-                  >
-                    {sizes.map((s) => {
-                      const isCurrent = s.cols === widget.cols && s.rows === widget.rows;
-                      const canResize =
-                        isCurrent ||
-                        !hasCollision(widget.col, widget.row, s.cols, s.rows, screen!.widgets, widget.id);
-                      return canResize ? (
-                        <option key={`${s.cols}x${s.rows}`} value={`${s.cols}x${s.rows}`} className="bg-gray-900">
-                          {s.cols} × {s.rows}
-                        </option>
-                      ) : null;
-                    })}
-                  </select>
+                    options={sizes
+                      .filter((s) => {
+                        const isCurrent = s.cols === widget.cols && s.rows === widget.rows;
+                        return isCurrent || !hasCollision(widget.col, widget.row, s.cols, s.rows, screen!.widgets, widget.id);
+                      })
+                      .map((s) => ({
+                        value: `${s.cols}x${s.rows}`,
+                        label: `${s.cols} \u00d7 ${s.rows}`,
+                      }))}
+                  />
                 </div>
                 <div className="flex flex-shrink-0 flex-col items-center gap-1.5">
                 <span className="text-xs text-gray-500">Alarm</span>
@@ -266,17 +244,16 @@ export default function ConfigPanel() {
                 {/* Mode */}
                 <div className="mb-2">
                   <label className="mb-1 block text-xs text-gray-500">Mode</label>
-                  <select
+                  <AnimatedSelect
                     value={widget.graphConfig?.mode ?? "time_series"}
-                    onChange={(e) =>
-                      handleGraphConfig({ mode: e.target.value as graphMode })
+                    onChange={(v) =>
+                      handleGraphConfig({ mode: v as graphMode })
                     }
-                    className={selectClass}
-                    style={SELECT_STYLE}
-                  >
-                    <option value="time_series" className="bg-gray-900">Time Series</option>
-                    <option value="xy" className="bg-gray-900">XY</option>
-                  </select>
+                    options={[
+                      { value: "time_series", label: "Time Series" },
+                      { value: "xy", label: "XY" },
+                    ]}
+                  />
                 </div>
 
                 {/* Max Points */}
@@ -313,51 +290,45 @@ export default function ConfigPanel() {
                     <div className="mb-2 grid grid-cols-2 gap-2">
                       <div>
                         <label className="mb-1 block text-xs text-gray-500">X Frame</label>
-                        <select
+                        <AnimatedSelect
                           value={
                             widget.graphConfig?.x_can_id !== undefined
                               ? "0x" + widget.graphConfig.x_can_id.toString(16)
                               : ""
                           }
-                          onChange={(e) =>
+                          onChange={(v) =>
                             handleGraphConfig({
-                              x_can_id: e.target.value
-                                ? parseInt(e.target.value, 16)
-                                : undefined,
+                              x_can_id: v ? parseInt(v, 16) : undefined,
                             })
                           }
-                          className={selectClass}
-                          style={SELECT_STYLE}
-                        >
-                          <option value="" className="bg-gray-900">None</option>
-                          {Object.entries(frameParserConfig).map(([id, frame]) => (
-                            <option key={id} value={id} className="bg-gray-900">
-                              {id} ({frame.can_id_label})
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "None" },
+                            ...Object.entries(frameParserConfig).map(([id, frame]) => ({
+                              value: id,
+                              label: `${id} (${frame.can_id_label})`,
+                            })),
+                          ]}
+                        />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-gray-500">X Signal</label>
-                        <select
+                        <AnimatedSelect
                           value={widget.graphConfig?.x_signal ?? ""}
-                          onChange={(e) =>
-                            handleGraphConfig({ x_signal: e.target.value || undefined })
+                          onChange={(v) =>
+                            handleGraphConfig({ x_signal: v || undefined })
                           }
                           disabled={widget.graphConfig?.x_can_id === undefined}
-                          className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-40`}
-                          style={SELECT_STYLE}
-                        >
-                          <option value="" className="bg-gray-900">None</option>
-                          {(widget.graphConfig?.x_can_id !== undefined
-                            ? frameParserConfig["0x" + widget.graphConfig.x_can_id.toString(16)]?.signals ?? []
-                            : []
-                          ).map((sig) => (
-                            <option key={sig.name} value={sig.name} className="bg-gray-900">
-                              {sig.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "None" },
+                            ...(widget.graphConfig?.x_can_id !== undefined
+                              ? frameParserConfig["0x" + widget.graphConfig.x_can_id.toString(16)]?.signals ?? []
+                              : []
+                            ).map((sig) => ({
+                              value: sig.name,
+                              label: sig.name,
+                            })),
+                          ]}
+                        />
                       </div>
                     </div>
                     <div className="mb-2">

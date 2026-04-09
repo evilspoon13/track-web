@@ -3,7 +3,11 @@ const USE_JSON = IS_PROD || !process.stdout.isTTY;
 
 type Level = "info" | "warn" | "error" | "debug";
 
+const LEVEL_RANK: Record<Level, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+const MIN_LEVEL: Level = (process.env.LOG_LEVEL as Level) || "info";
+
 function emit(level: Level, ctx: string, msg: string, meta?: Record<string, unknown>): void {
+  if (LEVEL_RANK[level] < LEVEL_RANK[MIN_LEVEL]) return;
   const ts = new Date().toISOString();
   const out = level === "error" ? process.stderr : process.stdout;
   if (USE_JSON) {

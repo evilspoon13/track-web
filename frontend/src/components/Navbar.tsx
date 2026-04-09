@@ -96,8 +96,8 @@ export default function Navbar() {
     <>
       {/* Save Confirmation Modal */}
       {showSaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
+        <div className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="anim-modal mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
             <h2 className="mb-4 text-xl font-bold text-white">Save Configuration?</h2>
             <p className="mb-8 text-gray-300">{saveModalMessage}</p>
             <div className="flex gap-4">
@@ -120,8 +120,8 @@ export default function Navbar() {
 
       {/* Clear Widgets Confirmation Modal */}
       {showClearModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
+        <div className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="anim-modal mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
             <h2 className="mb-4 text-xl font-bold text-white">Clear Widgets?</h2>
             <p className="mb-8 text-gray-300">
               This will remove all widgets from the current screen.
@@ -146,8 +146,8 @@ export default function Navbar() {
 
       {/* Delete Screen Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
+        <div className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="anim-modal mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
             <h2 className="mb-4 text-xl font-bold text-white">Delete Screen?</h2>
             <p className="mb-8 text-gray-300">
               This will permanently delete the current screen and all its widgets.

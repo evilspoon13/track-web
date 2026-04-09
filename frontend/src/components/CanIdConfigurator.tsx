@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Trash2, Plus, Save } from "lucide-react";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import type { FrameDefinition, FrameSignal, SignalType } from "../types";
 import { saveDbc } from "../utils/layoutIO";
+import AnimatedSelect from "./AnimatedSelect";
 
 const SIGNAL_COLORS = [
   "bg-blue-500",
@@ -24,14 +25,6 @@ const TYPE_BYTES: Record<SignalType, number> = {
   uint16: 2, int16: 2,
   uint32: 4, int32: 4, float: 4,
   double: 8,
-};
-
-const SELECT_STYLE = {
-  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-  backgroundPosition: "right 0.375rem center",
-  backgroundRepeat: "no-repeat",
-  backgroundSize: "1.25em 1.25em",
-  paddingRight: "1.75rem",
 };
 
 // Convert between bits (data model / DBC) and bytes (UI)
@@ -238,8 +231,8 @@ export default function CanIdConfigurator() {
   return (
     <>
       {showSaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
+        <div className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="anim-modal mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
             <h2 className="mb-4 text-xl font-bold text-white">Save CAN Frames?</h2>
             <p className="mb-8 text-gray-300">
               This will overwrite the saved CAN signal configuration in the cloud.
@@ -288,7 +281,7 @@ export default function CanIdConfigurator() {
 
         {/* New frame form */}
         {newFrameMode && (
-          <div className="border-b border-gray-700 px-4 py-3">
+          <div className="anim-accordion border-b border-gray-700 px-4 py-3">
             <div className="mb-2">
               <label className="mb-1 block text-xs text-gray-400">CAN ID</label>
               <input
@@ -360,7 +353,7 @@ export default function CanIdConfigurator() {
               </div>
 
               {isExpanded && (
-                <div className="pl-8 pr-4">
+                <div className="anim-accordion pl-8 pr-4">
                   {/* Label edit */}
                   <div className="mb-3 pt-2">
                     <label className="mb-1 block text-xs text-gray-500">Label</label>
@@ -456,7 +449,7 @@ export default function CanIdConfigurator() {
                             </div>
 
                             {isSigExpanded && (
-                              <div className="pb-3 pl-5">
+                              <div className="anim-accordion pb-3 pl-5">
                                 <div className="grid grid-cols-2 gap-x-2 gap-y-2">
                                   <div>
                                     <label className="mb-1 block text-xs text-gray-500">Name</label>
@@ -469,16 +462,14 @@ export default function CanIdConfigurator() {
                                   </div>
                                   <div>
                                     <label className="mb-1 block text-xs text-gray-500">Type</label>
-                                    <select
+                                    <AnimatedSelect
                                       value={sig.type}
-                                      onChange={(e) => handleUpdateSignal(canId, sigIdx, { type: e.target.value as SignalType })}
-                                      className="w-full appearance-none rounded border border-gray-700 bg-transparent px-2 py-1 text-xs text-white focus:border-gray-500 focus:outline-none"
-                                      style={SELECT_STYLE}
-                                    >
-                                      {SIGNAL_TYPES.filter((t) => TYPE_BYTES[t] <= bitLenToByteLen(sig.start_byte, sig.length)).map((t) => (
-                                        <option key={t} value={t} className="bg-gray-900">{t}</option>
-                                      ))}
-                                    </select>
+                                      onChange={(v) => handleUpdateSignal(canId, sigIdx, { type: v as SignalType })}
+                                      options={SIGNAL_TYPES.filter((t) => TYPE_BYTES[t] <= bitLenToByteLen(sig.start_byte, sig.length)).map((t) => ({
+                                        value: t,
+                                        label: t,
+                                      }))}
+                                    />
                                   </div>
                                   <div>
                                     <label className="mb-1 block text-xs text-gray-500">Scale</label>

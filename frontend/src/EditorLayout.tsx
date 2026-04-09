@@ -118,8 +118,8 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
         const activeRect = active.rect.current.translated;
         if (!activeRect) return;
 
-        const dropX = activeRect.left - overRect.left + activeRect.width / 2;
-        const dropY = activeRect.top - overRect.top + activeRect.height / 2;
+        const dropX = activeRect.left - overRect.left;
+        const dropY = activeRect.top - overRect.top;
 
         const { col, row } = pixelToGrid(dropX, dropY, cellSize.w, cellSize.h);
         const widgetType = data.widgetType;
@@ -319,7 +319,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
                   )}
                 </button>
                 {settingsOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50">
+                  <div className="anim-dropdown absolute right-0 top-full mt-2 w-48 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50">
                     <div className="px-4 py-2.5">
                       <p className="truncate text-sm font-medium text-gray-200">
                         {auth.currentUser.displayName || auth.currentUser.email}

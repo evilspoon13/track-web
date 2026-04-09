@@ -181,7 +181,7 @@ export default function LogTerminalPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [leftPct, setLeftPct] = useState(() => {
     const saved = localStorage.getItem("log-split-pct");
-    return saved ? Number(saved) : 50;
+    return saved ? Number(saved) : 33;
   });
   const draggingRef = useRef(false);
 
@@ -276,7 +276,7 @@ export default function LogTerminalPage() {
 
                 {/* Expanded entries */}
                 {isExpanded && dd && (
-                  <div className="px-6 pb-3">
+                  <div className="anim-accordion px-6 pb-3">
                     {dd.loading && dd.entries.length === 0 && (
                       <div className="py-2 text-xs text-gray-600 text-center">loading...</div>
                     )}
