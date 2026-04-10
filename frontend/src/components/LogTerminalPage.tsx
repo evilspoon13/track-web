@@ -213,19 +213,19 @@ export default function LogTerminalPage() {
       {/* Left: History */}
       <div className="flex flex-col min-w-0 border-r border-gray-800" style={{ width: `${leftPct}%` }}>
         <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
-          <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LOG HISTORY</span>
+          <span className="text-xs tracking-[0.18em] text-gray-500">LOG HISTORY</span>
           <div className="flex items-center gap-3">
             <input
               type="date"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="h-7 bg-gray-900 border border-gray-700 rounded px-2 text-xs font-mono text-gray-400"
+              className="h-7 bg-gray-900 border border-gray-700 rounded px-2 text-xs text-gray-400"
               style={{ colorScheme: "dark" }}
             />
             {dateFilter && (
               <button
                 onClick={() => setDateFilter("")}
-                className="text-xs font-mono text-gray-500 hover:text-gray-300"
+                className="text-xs text-gray-500 hover:text-gray-300"
               >
                 CLEAR
               </button>
@@ -233,7 +233,7 @@ export default function LogTerminalPage() {
             <button
               onClick={handleDownloadAll}
               disabled={downloading !== null}
-              className="text-xs font-mono text-gray-500 hover:text-gray-300 disabled:opacity-40"
+              className="text-xs text-gray-500 hover:text-gray-300 disabled:opacity-40"
             >
               {downloading === "all" ? "EXPORTING..." : "DOWNLOAD ALL"}
             </button>
@@ -241,7 +241,7 @@ export default function LogTerminalPage() {
         </div>
 
         <div
-          className="flex-1 overflow-y-auto font-mono text-sm [&::-webkit-scrollbar]:hidden"
+          className="flex-1 overflow-y-auto text-sm [&::-webkit-scrollbar]:hidden"
           style={{ scrollbarWidth: "none" }}
         >
           {daysLoading && (
@@ -268,7 +268,7 @@ export default function LogTerminalPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDownloadDay(day.date); }}
                     disabled={downloading !== null}
-                    className="text-xs font-mono text-gray-600 hover:text-gray-300 disabled:opacity-40"
+                    className="text-xs text-gray-600 hover:text-gray-300 disabled:opacity-40"
                   >
                     {downloading === day.date ? "..." : "XLSX"}
                   </button>
@@ -320,19 +320,13 @@ export default function LogTerminalPage() {
 
       {/* Right: Live Feed */}
       <div className="flex flex-col min-w-0" style={{ width: `${100 - leftPct}%` }}>
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
-          <span className="text-xs font-mono tracking-[0.18em] text-gray-500">LIVE FEED</span>
-          <div className="flex items-center gap-2">
-            <div className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
-            <span className="text-xs font-mono text-gray-600">
-              {connected ? "CONNECTED" : "DISCONNECTED"}
-            </span>
-          </div>
+        <div className="flex h-12 flex-shrink-0 items-center border-b border-gray-800 px-6">
+          <span className="text-xs tracking-[0.18em] text-gray-500">LIVE FEED</span>
         </div>
         <div
           ref={liveScrollRef}
           onScroll={handleLiveScroll}
-          className="flex-1 overflow-y-auto px-6 py-4 font-mono text-xs text-green-500 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-900 [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-gray-600"
+          className="flex-1 overflow-y-auto px-6 py-4 text-xs text-green-500 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-900 [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-gray-600"
           style={{ scrollbarWidth: "thin", scrollbarColor: "#374151 #111827" }}
         >
           {rawMessages.length === 0 && (
