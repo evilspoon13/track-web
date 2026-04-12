@@ -130,10 +130,19 @@ export function editorReducer(
     }
 
     case "REMOVE_SCREEN": {
-      if (state.screens.length <= 1) return state;
       const remaining = state.screens.filter(
         (s) => s.id !== action.payload.id
       );
+      if (remaining.length === 0) {
+        const id = uuidv4();
+        const fresh = { id, name: "Screen 1", widgets: [] };
+        return {
+          ...state,
+          screens: [fresh],
+          activeScreenId: id,
+          selectedWidgetId: null,
+        };
+      }
       return {
         ...state,
         screens: remaining,
