@@ -246,7 +246,7 @@ export default function CanIdConfigurator() {
               </button>
               <button
                 onClick={handleSave}
-                className="flex-1 rounded bg-orange-600 px-6 py-4 text-lg font-medium text-white hover:bg-orange-500"
+                className="flex-1 rounded bg-teal-700 px-6 py-4 text-lg font-medium text-white hover:bg-teal-600"
               >
                 {saveStatus || "Save"}
               </button>
@@ -256,8 +256,8 @@ export default function CanIdConfigurator() {
       )}
       <div className="flex flex-col">
         {/* Section header */}
-        <div className="flex items-center justify-between border-b border-gray-700 px-4 py-2.5">
-          <span className="text-sm font-semibold text-gray-200">CAN Frames</span>
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <span className="text-xs font-medium text-gray-400">CAN Frames</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setNewFrameMode((v) => !v)}
@@ -273,7 +273,7 @@ export default function CanIdConfigurator() {
             >
               <Save className="h-3.5 w-3.5" />
               {canIdsDirty && (
-                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-orange-500" />
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-teal-500" />
               )}
             </button>
           </div>
@@ -325,18 +325,29 @@ export default function CanIdConfigurator() {
           <p className="px-4 py-3 text-xs text-gray-500">No CAN frames defined.</p>
         )}
 
-        {Object.entries(frameParserConfig).map(([canId, frame]) => {
+        {Object.entries(frameParserConfig).map(([canId, frame], frameIdx, arr) => {
           const isExpanded = expandedFrames.has(canId);
           const ownership = getByteOwnership(frame);
           const isActiveFrame = activeSignal?.canId === canId;
+          const isLast = frameIdx === arr.length - 1;
 
           return (
-            <div key={canId} className="border-b border-gray-700">
+            <div key={canId} className="relative">
               {/* Frame row */}
               <div
-                className="flex cursor-pointer items-center gap-2 px-4 py-2.5 hover:bg-white/5"
+                className="relative flex cursor-pointer items-center gap-2 py-2.5 pl-8 pr-4 hover:bg-white/5"
                 onClick={() => toggleFrame(canId)}
               >
+                <span
+                  aria-hidden
+                  className={`pointer-events-none absolute left-4 top-0 w-px bg-gray-700 ${
+                    isLast ? "bottom-1/2" : "bottom-0"
+                  }`}
+                />
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-4 top-1/2 h-px w-3 bg-gray-700"
+                />
                 {isExpanded ? (
                   <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
                 ) : (
@@ -353,10 +364,16 @@ export default function CanIdConfigurator() {
               </div>
 
               {isExpanded && (
-                <div className="anim-accordion pl-8 pr-4">
+                <div className="anim-accordion relative pl-8 pr-4">
+                  {!isLast && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute left-4 top-0 bottom-0 w-px bg-gray-700"
+                    />
+                  )}
                   {/* Label edit */}
                   <div className="mb-3 pt-2">
-                    <label className="mb-1 block text-xs text-gray-500">Label</label>
+                    <label className="mb-1 block text-xs font-medium text-gray-400">Label</label>
                     <input
                       type="text"
                       value={frame.can_id_label}
@@ -452,7 +469,7 @@ export default function CanIdConfigurator() {
                               <div className="anim-accordion pb-3 pl-5">
                                 <div className="grid grid-cols-2 gap-x-2 gap-y-2">
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-500">Name</label>
+                                    <label className="mb-1 block text-xs font-medium text-gray-400">Name</label>
                                     <input
                                       type="text"
                                       value={sig.name}
@@ -461,7 +478,7 @@ export default function CanIdConfigurator() {
                                     />
                                   </div>
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-500">Type</label>
+                                    <label className="mb-1 block text-xs font-medium text-gray-400">Type</label>
                                     <AnimatedSelect
                                       value={sig.type}
                                       onChange={(v) => handleUpdateSignal(canId, sigIdx, { type: v as SignalType })}
@@ -472,7 +489,7 @@ export default function CanIdConfigurator() {
                                     />
                                   </div>
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-500">Scale</label>
+                                    <label className="mb-1 block text-xs font-medium text-gray-400">Scale</label>
                                     <input
                                       type="number"
                                       value={sig.scale}
@@ -481,7 +498,7 @@ export default function CanIdConfigurator() {
                                     />
                                   </div>
                                   <div>
-                                    <label className="mb-1 block text-xs text-gray-500">Offset</label>
+                                    <label className="mb-1 block text-xs font-medium text-gray-400">Offset</label>
                                     <input
                                       type="number"
                                       value={sig.offset}
