@@ -245,10 +245,10 @@ export default function LogTerminalPage() {
           style={{ scrollbarWidth: "none" }}
         >
           {daysLoading && (
-            <div className="py-4 text-xs text-gray-600 text-center">loading...</div>
+            <div className="py-4 text-xs text-gray-600 text-center">Loading...</div>
           )}
           {!daysLoading && filteredDays.length === 0 && (
-            <div className="py-4 text-xs text-gray-600 text-center">no logs found</div>
+            <div className="py-4 text-xs text-gray-600 text-center">No logs found</div>
           )}
           {filteredDays.map((day) => {
             const isExpanded = expandedDay === day.date;
@@ -278,7 +278,7 @@ export default function LogTerminalPage() {
                 {isExpanded && dd && (
                   <div className="anim-accordion px-6 pb-3">
                     {dd.loading && dd.entries.length === 0 && (
-                      <div className="py-2 text-xs text-gray-600 text-center">loading...</div>
+                      <div className="py-2 text-xs text-gray-600 text-center">Loading...</div>
                     )}
                     {groupBySession(dd.entries).map((group, gi) => (
                       <div key={gi}>
@@ -331,7 +331,7 @@ export default function LogTerminalPage() {
         >
           {rawMessages.length === 0 && (
             <div className="py-4 text-xs text-gray-600 text-center">
-              {connected ? "waiting for telemetry..." : "not connected"}
+              {connected ? "Waiting for telemetry..." : "Not connected"}
             </div>
           )}
           {rawMessages.map((msg, i) => {
