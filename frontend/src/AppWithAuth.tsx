@@ -6,6 +6,7 @@ import { EditorProvider } from "./state/EditorContext";
 import { TelemetryProvider } from "./state/TelemetryContext";
 import EditorLayout from "./EditorLayout";
 import LandingPage from "./components/LandingPage";
+import EditorSkeleton, { useDeferredSkeleton } from "./components/EditorSkeleton";
 import { listScreens, DeviceNotRegisteredError } from "./utils/layoutIO";
 
 type AppState = "loading" | "ready" | "unregistered";
@@ -13,6 +14,7 @@ type AppState = "loading" | "ready" | "unregistered";
 export default function AppWithAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [appState, setAppState] = useState<AppState>("loading");
+  const showSkeleton = useDeferredSkeleton(!!user && appState === "loading");
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -45,7 +47,7 @@ export default function AppWithAuth() {
     return <LandingPage onLogin={() => {}} />;
   }
 
-  if (appState === "loading") return null;
+  if (appState === "loading") return showSkeleton ? <EditorSkeleton /> : null;
 
   if (appState === "unregistered") {
     const handleRetry = async () => {

@@ -82,9 +82,43 @@ export default function DevicePage() {
   };
 
   if (loadState === "loading") {
+    const shimmer = "animate-pulse rounded bg-gray-700/60";
     return (
-      <div className="flex flex-1 items-center justify-center bg-gray-900">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+      <div className="flex flex-1 flex-col overflow-hidden bg-gray-900">
+        <div className="flex h-10 flex-shrink-0 items-center border-b border-gray-800 px-6">
+          <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">
+            DEVICE
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="mx-auto max-w-md space-y-6">
+            <div>
+              <div className={`${shimmer} mb-1.5 h-3 w-16`} />
+              <div className="flex items-center gap-2">
+                <div className={`${shimmer} h-9 flex-1`} />
+                <div className={`${shimmer} h-9 w-9`} />
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <div className={`${shimmer} h-1.5 w-1.5 rounded-full`} />
+                <div className={`${shimmer} h-3 w-16`} />
+              </div>
+            </div>
+            <div>
+              <div className={`${shimmer} mb-1.5 h-3 w-24`} />
+              <div className={`${shimmer} mb-3 h-3 w-full`} />
+              <div className="space-y-2">
+                <div className={`${shimmer} h-9 w-full`} />
+                <div className={`${shimmer} h-9 w-full`} />
+                <div className={`${shimmer} h-9 w-2/3`} />
+              </div>
+              <div className="mt-3 flex gap-2">
+                <div className={`${shimmer} h-9 flex-1`} />
+                <div className={`${shimmer} h-9 w-16`} />
+              </div>
+            </div>
+            <div className={`${shimmer} h-9 w-20`} />
+          </div>
+        </div>
       </div>
     );
   }
