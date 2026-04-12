@@ -356,8 +356,41 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   return activePiId;
 }
 
+function toHexCanId(n: unknown): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "0x0";
+  return "0x" + Math.floor(n).toString(16);
+}
+
+function normalizeConfigForPi(config: unknown): unknown {
+  if (!config || typeof config !== "object") return config;
+  const c = config as { screens?: Array<{ widgets?: Array<Record<string, unknown>> }> };
+  if (!Array.isArray(c.screens)) return config;
+
+  return {
+    ...c,
+    screens: c.screens.map((s) => ({
+      ...s,
+      widgets: (s.widgets ?? []).map((w) => {
+        const data = w.data as { can_id?: unknown } | undefined;
+        const graph = w.graph as { x_can_id?: unknown } | undefined;
+        return {
+          ...w,
+          data: data ? { ...data, can_id: toHexCanId(data.can_id) } : data,
+          graph:
+            graph && typeof graph.x_can_id === "number"
+              ? { ...graph, x_can_id: toHexCanId(graph.x_can_id) }
+              : graph,
+        };
+      }),
+    })),
+  };
+}
+
 export function sendConfigToPi(deviceId: string, screenInfo: unknown): boolean {
-  return sendMessageToPi(deviceId, { type: "config_update", payload: screenInfo });
+  return sendMessageToPi(deviceId, {
+    type: "config_update",
+    payload: normalizeConfigForPi(screenInfo),
+  });
 }
 
 export function sendMessageToPi(deviceId: string, message: unknown): boolean {
