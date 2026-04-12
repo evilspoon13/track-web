@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Trash2 } from "lucide-react";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { deleteScreen, saveScreen } from "../utils/layoutIO";
 
@@ -140,10 +141,10 @@ export default function ScreenTabs() {
                 <span className="ml-1.5 flex-shrink-0 text-[10px] text-gray-400">new</span>
               )}
               {screen.isDirty && (
-                <span className="ml-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
+                <span className="ml-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-teal-500" />
               )}
             </span>
-            {state.screens.length > 1 && (
+            {state.screens.length > 1 && !screen.originalName && (
               <span
                 onClick={(e) => {
                   e.stopPropagation();
@@ -152,9 +153,10 @@ export default function ScreenTabs() {
                     payload: { id: screen.id },
                   });
                 }}
-                className="ml-2 text-gray-400 hover:text-red-400"
+                className="ml-2 flex-shrink-0 text-gray-400 hover:text-red-400"
+                title="Dismiss draft"
               >
-                ×
+                <Trash2 className="h-3.5 w-3.5" />
               </span>
             )}
           </button>

@@ -4,7 +4,7 @@ import ScreenTabs from "./ScreenTabs";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { saveScreen, deleteScreen, uploadDbc, saveDbc } from "../utils/layoutIO";
 import type { WidgetType } from "../types";
-import { Save, RotateCcw, X, Upload } from "lucide-react";
+import { Save, RotateCcw, Trash2, Upload } from "lucide-react";
 
 const widgetTypes: WidgetType[] = [
   "gauge",
@@ -109,7 +109,7 @@ export default function Navbar() {
               </button>
               <button
                 onClick={handleConfirmSave}
-                className="flex-1 rounded bg-orange-600 px-6 py-4 text-lg font-medium text-white hover:bg-orange-500"
+                className="flex-1 rounded bg-teal-700 px-6 py-4 text-lg font-medium text-white hover:bg-teal-600"
               >
                 Save
               </button>
@@ -135,7 +135,7 @@ export default function Navbar() {
               </button>
               <button
                 onClick={handleConfirmClear}
-                className="flex-1 rounded bg-orange-600 px-6 py-4 text-lg font-medium text-white hover:bg-orange-500"
+                className="flex-1 rounded bg-emerald-700 px-6 py-4 text-lg font-medium text-white hover:bg-emerald-600"
               >
                 Clear
               </button>
@@ -171,9 +171,8 @@ export default function Navbar() {
       )}
 
       <div className="flex h-full w-72 flex-col border-r border-gray-700 bg-gray-800">
-        {/* Header */}
         {/* DBC Upload */}
-        <div className="border-b border-gray-700 p-4">
+        <div className="p-4 pb-2">
           <label className="mb-2 block text-xs font-medium text-gray-400">DBC File</label>
           <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded border border-gray-600 bg-gray-900 px-3 py-2 text-xs text-gray-400 hover:border-gray-500 hover:text-white">
             <Upload className="h-3.5 w-3.5" />
@@ -182,46 +181,40 @@ export default function Navbar() {
           </label>
         </div>
 
-        {/* Screen Tabs */}
-        <div
-          className="overflow-y-auto border-b border-gray-700 p-4 scrollbar-hide"
-          style={{ maxHeight: "200px" }}
-        >
-          <label className="mb-2 block text-xs font-medium text-gray-400">
-            Screens
-          </label>
-          <div className="flex flex-col gap-2">
-            <ScreenTabs />
-          </div>
-        </div>
-
         {/* Widget Palette */}
-        <div className="border-b border-gray-700 p-4">
+        <div className="p-4 py-2">
           <label className="mb-2 block text-xs font-medium text-gray-400">
             Components
           </label>
-          <div
-            className="grid grid-cols-2 gap-2 overflow-y-auto scrollbar-hide"
-            style={{ maxHeight: "400px" }}
-          >
+          <div className="grid grid-cols-2 gap-2">
             {widgetTypes.map((t) => (
               <DraggableWidget key={t} widgetType={t} />
             ))}
           </div>
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        {/* Screen Tabs */}
+        <div className="flex min-h-0 flex-1 flex-col p-4 pt-2">
+          <label className="mb-2 block flex-shrink-0 text-xs font-medium text-gray-400">
+            Screens
+          </label>
+          <div className="flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+            <ScreenTabs />
+          </div>
+        </div>
 
         {/* Action Buttons */}
-        <div className="p-4">
+        <div className="p-4 pt-2">
+          <label className="mb-2 block text-xs font-medium text-gray-400">
+            Actions
+          </label>
           <div className="flex gap-2">
             {/* Save */}
             <button
               onClick={handleSave}
               className={`relative flex flex-1 flex-col items-center justify-center gap-1 rounded py-3 transition-colors duration-200 ${
                 activeScreen?.isDirty || state.canIdsDirty
-                  ? "bg-gray-700 hover:bg-orange-700"
+                  ? "bg-gray-700 hover:bg-teal-700"
                   : "bg-gray-700 hover:bg-blue-700"
               }`}
               aria-label="Save configuration"
@@ -231,14 +224,14 @@ export default function Navbar() {
                 {saveStatus || "Save"}
               </span>
               {(activeScreen?.isDirty || state.canIdsDirty) && (
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-orange-500" />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-teal-500" />
               )}
             </button>
 
             {/* Clear */}
             <button
               onClick={() => setShowClearModal(true)}
-              className="flex flex-1 flex-col items-center justify-center gap-1 rounded bg-gray-700 py-3 transition-colors duration-200 hover:bg-amber-700"
+              className="flex flex-1 flex-col items-center justify-center gap-1 rounded bg-gray-700 py-3 transition-colors duration-200 hover:bg-emerald-700"
               aria-label="Clear all widgets"
             >
               <RotateCcw className="h-5 w-5 text-white" />
@@ -248,15 +241,10 @@ export default function Navbar() {
             {/* Delete */}
             <button
               onClick={() => setShowDeleteModal(true)}
-              disabled={state.screens.length <= 1}
-              className={`flex flex-1 flex-col items-center justify-center gap-1 rounded py-3 transition-colors duration-200 ${
-                state.screens.length <= 1
-                  ? "cursor-not-allowed bg-gray-700 opacity-40"
-                  : "bg-gray-700 hover:bg-red-800"
-              }`}
+              className="flex flex-1 flex-col items-center justify-center gap-1 rounded bg-gray-700 py-3 transition-colors duration-200 hover:bg-red-800"
               aria-label="Delete current screen"
             >
-              <X className="h-5 w-5 text-white" />
+              <Trash2 className="h-5 w-5 text-white" />
               <span className="text-xs text-white">Delete</span>
             </button>
           </div>
