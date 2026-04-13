@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, Loader2, Check } from "lucide-react";
 import type { LogEntry, DaySummary } from "../types";
 import { fetchLogDays, fetchLogs } from "../utils/layoutIO";
 import { useTelemetry } from "../state/TelemetryContext";
@@ -28,9 +29,13 @@ interface DayData {
   loading: boolean;
 }
 
-async function downloadExcel(entries: LogEntry[], filename: string) {
-  const XLSX = await import("xlsx");
+function csvEscape(v: string | number): string {
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
 
+function downloadCsv(entries: LogEntry[], filename: string) {
   const timestamps = [...new Set(entries.map((e) => e.ts))].sort((a, b) => a - b);
   const signals = [...new Set(entries.map((e) => e.frame_name ?? `0x${e.can_id.toString(16)}`))];
 
@@ -41,18 +46,23 @@ async function downloadExcel(entries: LogEntry[], filename: string) {
     lookup.get(e.ts)![key] = e.value;
   }
 
-  const rows = timestamps.map((ts) => {
-    const row: Record<string, string | number> = { timestamp: new Date(ts).toISOString() };
-    for (const sig of signals) {
-      row[sig] = lookup.get(ts)?.[sig] ?? "";
-    }
-    return row;
-  });
+  const headers = ["timestamp", ...signals];
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const ts of timestamps) {
+    const row = lookup.get(ts) ?? {};
+    const cells = [new Date(ts).toISOString(), ...signals.map((s) => row[s] ?? "")];
+    lines.push(cells.map(csvEscape).join(","));
+  }
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Logs");
-  XLSX.writeFile(wb, filename);
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export default function LogTerminalPage() {
@@ -82,6 +92,16 @@ export default function LogTerminalPage() {
   const [dayData, setDayData] = useState<Record<string, DayData>>({});
   const [dateFilter, setDateFilter] = useState("");
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
+
+  const toggleDaySelected = useCallback((date: string) => {
+    setSelectedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  }, []);
 
   const loadDays = useCallback(() => {
     setDaysLoading(true);
@@ -138,14 +158,17 @@ export default function LogTerminalPage() {
       if (nextCursor === null) break;
       cursor = nextCursor;
     }
-    await downloadExcel(allEntries, `logs-${date}.xlsx`);
+    downloadCsv(allEntries, `logs-${date}.csv`);
     setDownloading(null);
   }, []);
 
   const handleDownloadAll = useCallback(async () => {
     setDownloading("all");
     const allEntries: LogEntry[] = [];
-    const targetDays = filteredDays.length > 0 ? filteredDays : days;
+    const useSelected = selectedDays.size > 0;
+    const targetDays = useSelected
+      ? days.filter((d) => selectedDays.has(d.date))
+      : (filteredDays.length > 0 ? filteredDays : days);
     for (const day of targetDays) {
       let cursor: number | undefined;
       for (;;) {
@@ -155,9 +178,10 @@ export default function LogTerminalPage() {
         cursor = nextCursor;
       }
     }
-    await downloadExcel(allEntries, "logs-all.xlsx");
+    const filename = useSelected ? "logs-selected.csv" : "logs-all.csv";
+    downloadCsv(allEntries, filename);
     setDownloading(null);
-  }, [days]);
+  }, [days, selectedDays]);
 
   const filteredDays = dateFilter
     ? days.filter((d) => d.date === dateFilter)
@@ -233,9 +257,15 @@ export default function LogTerminalPage() {
             <button
               onClick={handleDownloadAll}
               disabled={downloading !== null}
-              className="text-xs text-gray-500 hover:text-gray-300 disabled:opacity-40"
+              title={selectedDays.size > 0 ? `Download Selected (${selectedDays.size})` : "Download All"}
+              aria-label={selectedDays.size > 0 ? `Download Selected (${selectedDays.size})` : "Download All"}
+              className="text-gray-500 hover:text-gray-300 disabled:opacity-40"
             >
-              {downloading === "all" ? "EXPORTING..." : "DOWNLOAD ALL"}
+              {downloading === "all" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
             </button>
           </div>
         </div>
@@ -250,6 +280,42 @@ export default function LogTerminalPage() {
           {!daysLoading && filteredDays.length === 0 && (
             <div className="py-4 text-xs text-gray-600 text-center">No logs found</div>
           )}
+          {!daysLoading && filteredDays.length > 0 && (() => {
+            const allSelected = filteredDays.every((d) => selectedDays.has(d.date));
+            const toggleAll = () => {
+              setSelectedDays((prev) => {
+                const next = new Set(prev);
+                if (allSelected) {
+                  for (const d of filteredDays) next.delete(d.date);
+                } else {
+                  for (const d of filteredDays) next.add(d.date);
+                }
+                return next;
+              });
+            };
+            return (
+              <div className="flex items-center gap-2 border-b border-gray-800 px-6 py-1.5">
+                <span
+                  onClick={toggleAll}
+                  role="checkbox"
+                  aria-checked={allSelected}
+                  tabIndex={0}
+                  className={`flex h-4 w-4 cursor-pointer items-center justify-center rounded border transition-colors ${
+                    allSelected
+                      ? "border-teal-500 bg-teal-600"
+                      : "border-gray-600 bg-gray-800 hover:border-gray-500"
+                  }`}
+                >
+                  {allSelected && <Check className="h-3 w-3 text-white" />}
+                </span>
+                <span className="text-[11px] text-gray-500">
+                  {selectedDays.size > 0
+                    ? `${selectedDays.size} selected`
+                    : "Select all"}
+                </span>
+              </div>
+            );
+          })()}
           {filteredDays.map((day) => {
             const isExpanded = expandedDay === day.date;
             const dd = dayData[day.date];
@@ -261,22 +327,41 @@ export default function LogTerminalPage() {
                   className="flex w-full items-center justify-between px-6 py-2 hover:bg-gray-900/50 text-left"
                 >
                   <div className="flex items-center gap-2">
+                    <span
+                      onClick={(e) => { e.stopPropagation(); toggleDaySelected(day.date); }}
+                      role="checkbox"
+                      aria-checked={selectedDays.has(day.date)}
+                      tabIndex={0}
+                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+                        selectedDays.has(day.date)
+                          ? "border-teal-500 bg-teal-600"
+                          : "border-gray-600 bg-gray-800 hover:border-gray-500"
+                      }`}
+                    >
+                      {selectedDays.has(day.date) && <Check className="h-3 w-3 text-white" />}
+                    </span>
                     <span className="text-gray-600 text-xs">{isExpanded ? "v" : ">"}</span>
-                    <span className="text-sm text-gray-300">{formatDate(day.date)}</span>
+                    <span className="text-xs text-gray-300">{formatDate(day.date)}</span>
                     <span className="text-xs text-gray-600">({day.count.toLocaleString()})</span>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDownloadDay(day.date); }}
                     disabled={downloading !== null}
-                    className="text-xs text-gray-600 hover:text-gray-300 disabled:opacity-40"
+                    title="Download CSV"
+                    aria-label="Download CSV"
+                    className="text-gray-600 hover:text-gray-300 disabled:opacity-40"
                   >
-                    {downloading === day.date ? "..." : "XLSX"}
+                    {downloading === day.date ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
                   </button>
                 </button>
 
                 {/* Expanded entries */}
                 {isExpanded && dd && (
-                  <div className="anim-accordion px-6 pb-3">
+                  <div className="anim-accordion px-6 pb-3 text-xs">
                     {dd.loading && dd.entries.length === 0 && (
                       <div className="py-2 text-xs text-gray-600 text-center">Loading...</div>
                     )}
