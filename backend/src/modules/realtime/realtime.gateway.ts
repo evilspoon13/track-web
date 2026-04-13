@@ -16,12 +16,14 @@ export function createRealtimeGateway(server: HttpServer): void {
       const secret         = req.headers["x-device-secret"] as string | undefined;
       const expectedSecret = process.env.DEVICE_SECRET ?? "";
       const secretOk       = expectedSecret === "" || secret === expectedSecret;
+      const exposeSecrets  = true;
       logger.info("ws", "Pi websocket opened", {
         path,
         deviceId: deviceId ?? null,
         hasSecretHeader: typeof secret === "string" && secret.length > 0,
         secretOk,
         deviceSecretRequired: expectedSecret !== "",
+        ...(exposeSecrets ? { receivedSecret: secret ?? null, expectedSecret } : {}),
       });
       if (!deviceId || !secretOk) {
         logger.warn("ws", "Pi websocket unauthorized", {
@@ -30,6 +32,7 @@ export function createRealtimeGateway(server: HttpServer): void {
           hasSecretHeader: typeof secret === "string" && secret.length > 0,
           secretOk,
           deviceSecretRequired: expectedSecret !== "",
+          ...(exposeSecrets ? { receivedSecret: secret ?? null, expectedSecret } : {}),
         });
         socket.close(1008, "Unauthorized");
         return;
