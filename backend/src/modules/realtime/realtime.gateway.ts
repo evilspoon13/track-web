@@ -16,24 +16,39 @@ export function createRealtimeGateway(server: HttpServer): void {
       const secret         = req.headers["x-device-secret"] as string | undefined;
       const expectedSecret = process.env.DEVICE_SECRET ?? "";
       const secretOk       = expectedSecret === "" || secret === expectedSecret;
+      logger.info("ws", "Pi websocket opened", {
+        path,
+        deviceId: deviceId ?? null,
+        hasSecretHeader: typeof secret === "string" && secret.length > 0,
+        secretOk,
+        deviceSecretRequired: expectedSecret !== "",
+      });
       if (!deviceId || !secretOk) {
+        logger.warn("ws", "Pi websocket unauthorized", {
+          path,
+          deviceId: deviceId ?? null,
+          hasSecretHeader: typeof secret === "string" && secret.length > 0,
+          secretOk,
+          deviceSecretRequired: expectedSecret !== "",
+        });
         socket.close(1008, "Unauthorized");
         return;
       }
-      //logger.info("ws", "Pi connected", { path });
+      logger.info("ws", "Pi connected", { path, deviceId });
       socket.on("message", (data) => {
         activePiId = RealtimeService.handlePiMessage(socket, data, activePiId);
       });
 
       socket.on("close", () => {
-        //logger.info("ws", "Pi disconnected", { piId: activePiId ?? "unregistered" });
+        logger.info("ws", "Pi disconnected", { piId: activePiId ?? "unregistered" });
         if (activePiId) {
           RealtimeService.disconnectPi(activePiId, socket);
         }
       });
     }
     else if (path === "/ws/client") {
-      //logger.info("ws", "Client connected", { path });
+      logger.info("ws", "Client websocket opened", { path });
+      logger.info("ws", "Client connected", { path });
       socket.on("message", (data) => {
         RealtimeService.handleClientMessage(socket, data, activeClientId)
           .then((nextClientId) => { activeClientId = nextClientId; })
@@ -41,7 +56,7 @@ export function createRealtimeGateway(server: HttpServer): void {
       });
 
       socket.on("close", () => {
-        //logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
+        logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
         RealtimeService.disconnectClient(socket);
       });
     }
