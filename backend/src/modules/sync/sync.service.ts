@@ -89,6 +89,15 @@ export async function planForState(deviceId: string, hello: SyncStateMessage, fi
   const pi_version_id = asNumber(meta?.version_id) ?? null;
 
   const cloud = await getFileState(deviceId, fileId);
+  logSyncEvent("plan", {
+    deviceId,
+    fileId,
+    pending_upload,
+    pending_base_version_id,
+    pi_version_id,
+    cloud_version_id: cloud?.version_id ?? null,
+    cloud_has_content: Boolean(cloud?.content_b64),
+  });
   if (!cloud || !cloud.content_b64) {
     // No cloud copy yet; only allow upload fast-forward from rev=0.
     if (pending_upload && pending_base_version_id === 0) {
@@ -134,6 +143,7 @@ async function commitFileWithContent(
     const current_size = typeof current.content_size === "number" ? current.content_size : 0;
 
     if (current_change_id && current_change_id === change_id) {
+      logSyncEvent("commit_idempotent", { deviceId, fileId, change_id, version_id: current_rev });
       return {
         state: {
           file_id: fileId,
@@ -158,6 +168,13 @@ async function commitFileWithContent(
         change_id: current_change_id,
         content_size: current_size,
       };
+      logSyncEvent("commit_base_mismatch", {
+        deviceId,
+        fileId,
+        change_id,
+        expected_base_version_id: current_rev,
+        got_base_version_id: base_version_id,
+      });
       throw new BaseRevMismatchError(base_version_id, currentState);
     }
 
@@ -172,6 +189,15 @@ async function commitFileWithContent(
       content_size: content.byteLength,
     };
     tx.set(ref, next, { merge: true });
+    logSyncEvent("commit_ok", {
+      deviceId,
+      fileId,
+      change_id,
+      base_version_id,
+      version_id: next_rev,
+      modified_by,
+      content_size: content.byteLength,
+    });
     return { state: next, alreadyCommitted: false };
   });
 }

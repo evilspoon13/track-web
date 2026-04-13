@@ -20,20 +20,20 @@ export function createRealtimeGateway(server: HttpServer): void {
         socket.close(1008, "Unauthorized");
         return;
       }
-      logger.info("ws", "Pi connected", { path });
+      //logger.info("ws", "Pi connected", { path });
       socket.on("message", (data) => {
         activePiId = RealtimeService.handlePiMessage(socket, data, activePiId);
       });
 
       socket.on("close", () => {
-        logger.info("ws", "Pi disconnected", { piId: activePiId ?? "unregistered" });
+        //logger.info("ws", "Pi disconnected", { piId: activePiId ?? "unregistered" });
         if (activePiId) {
           RealtimeService.disconnectPi(activePiId, socket);
         }
       });
     }
     else if (path === "/ws/client") {
-      logger.info("ws", "Client connected", { path });
+      //logger.info("ws", "Client connected", { path });
       socket.on("message", (data) => {
         RealtimeService.handleClientMessage(socket, data, activeClientId)
           .then((nextClientId) => { activeClientId = nextClientId; })
@@ -41,7 +41,7 @@ export function createRealtimeGateway(server: HttpServer): void {
       });
 
       socket.on("close", () => {
-        logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
+        //logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
         RealtimeService.disconnectClient(socket);
       });
     }

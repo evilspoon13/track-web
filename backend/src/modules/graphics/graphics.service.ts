@@ -2,6 +2,7 @@ import { db } from "../../lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import type { ApiMessage } from "../../common/types/api.types";
 import type { ScreenInfo } from "./graphics.types";
+import { logger } from "../../common/logger";
 
 const col = (deviceId: string) =>
   db.collection("devices").doc(deviceId).collection("screens");
@@ -78,6 +79,12 @@ export async function replaceAllScreensFromPi(deviceId: string, screens: unknown
   const nextIds = new Set<string>(normalizedScreens.map((s) => encodeURIComponent(s.name)));
 
   const existing = await col(deviceId).get();
+  logger.info("sync", "Replacing screens from Pi", {
+    deviceId,
+    incomingScreens: screens.length,
+    normalizedScreens: normalizedScreens.length,
+    existingDocs: existing.docs.length,
+  });
   const batch = db.batch();
 
   for (const doc of existing.docs) {
@@ -90,4 +97,9 @@ export async function replaceAllScreensFromPi(deviceId: string, screens: unknown
   }
 
   await batch.commit();
+  logger.info("sync", "Replaced screens from Pi", {
+    deviceId,
+    keptOrUpserted: normalizedScreens.length,
+    deleted: existing.docs.length - nextIds.size < 0 ? 0 : existing.docs.length - nextIds.size,
+  });
 }
