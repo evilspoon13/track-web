@@ -12,6 +12,7 @@ import type {
   LogsResponse,
   GraphInfo,
   graphMode,
+  ScreenPrefs,
 } from "../types";
 
 // Backend API shapes (mirrors graphics.types.ts + frame-parser.types.ts)
@@ -208,6 +209,28 @@ export async function saveDbc(config: FrameParserConfig): Promise<void> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ frames: config }),
+  });
+}
+
+export async function getScreenPrefs(): Promise<ScreenPrefs> {
+  try {
+    const res = await authFetch("/api/prefs/screens");
+    if (!res.ok) return { pinnedNames: [], order: [] };
+    const data = await res.json() as Partial<ScreenPrefs>;
+    return {
+      pinnedNames: Array.isArray(data.pinnedNames) ? data.pinnedNames : [],
+      order: Array.isArray(data.order) ? data.order : [],
+    };
+  } catch {
+    return { pinnedNames: [], order: [] };
+  }
+}
+
+export async function saveScreenPrefs(prefs: ScreenPrefs): Promise<void> {
+  await authFetch("/api/prefs/screens", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(prefs),
   });
 }
 

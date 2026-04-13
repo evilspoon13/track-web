@@ -97,6 +97,18 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
             return;
           }
 
+          if (type === "screen_prefs_updated" && msg.prefs && typeof msg.prefs === "object") {
+            const p = msg.prefs as { pinnedNames?: unknown; order?: unknown };
+            const pinnedNames = Array.isArray(p.pinnedNames)
+              ? p.pinnedNames.filter((v): v is string => typeof v === "string")
+              : [];
+            const order = Array.isArray(p.order)
+              ? p.order.filter((v): v is string => typeof v === "string")
+              : [];
+            editorDispatch({ type: "SET_SCREEN_PREFS", payload: { pinnedNames, order } });
+            return;
+          }
+
           if (type !== "Telemetry") return;
           const payload = msg.payload as { signals?: Record<string, number> } | undefined;
           const incoming = payload?.signals ?? {};

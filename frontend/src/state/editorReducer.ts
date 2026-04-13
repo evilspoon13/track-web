@@ -1,5 +1,28 @@
 import { v4 as uuidv4 } from "uuid";
-import type { EditorState, EditorAction } from "../types";
+import type { EditorState, EditorAction, ScreenState } from "../types";
+
+function nextDefaultScreenName(screens: ScreenState[]): string {
+  const existing = new Set(screens.map((s) => s.name));
+  let n = 1;
+  while (existing.has(`Screen ${n}`)) n++;
+  return `Screen ${n}`;
+}
+
+function prefsWithoutName(
+  pinned: Set<string>,
+  order: string[],
+  name: string
+): { pinned: Set<string>; order: string[]; changed: boolean } {
+  const pinnedHad = pinned.has(name);
+  const orderIdx = order.indexOf(name);
+  if (!pinnedHad && orderIdx < 0) {
+    return { pinned, order, changed: false };
+  }
+  const nextPinned = new Set(pinned);
+  nextPinned.delete(name);
+  const nextOrder = orderIdx >= 0 ? order.filter((n) => n !== name) : order;
+  return { pinned: nextPinned, order: nextOrder, changed: true };
+}
 
 export function createInitialState(): EditorState {
   const screenId = uuidv4();
@@ -9,6 +32,9 @@ export function createInitialState(): EditorState {
     selectedWidgetId: null,
     frameParserConfig: {},
     canIdsDirty: false,
+    pinnedScreenNames: new Set<string>(),
+    screenOrder: [],
+    prefsDirty: false,
   };
 }
 
@@ -118,7 +144,7 @@ export function editorReducer(
       const id = uuidv4();
       const newScreen = {
         id,
-        name: `Screen ${state.screens.length + 1}`,
+        name: nextDefaultScreenName(state.screens),
         widgets: [],
       };
       return {
@@ -159,14 +185,18 @@ export function editorReducer(
       const target = state.screens.find((s) => s.originalName === action.payload.name);
       if (!target) return state;
       const remaining = state.screens.filter((s) => s.id !== target.id);
+      const prefs = prefsWithoutName(state.pinnedScreenNames, state.screenOrder, action.payload.name);
       if (remaining.length === 0) {
         const id = uuidv4();
-        const fresh = { id, name: "Screen 1", widgets: [] };
+        const fresh = { id, name: nextDefaultScreenName([]), widgets: [] };
         return {
           ...state,
           screens: [fresh],
           activeScreenId: id,
           selectedWidgetId: null,
+          pinnedScreenNames: prefs.pinned,
+          screenOrder: prefs.order,
+          prefsDirty: prefs.changed || state.prefsDirty,
         };
       }
       return {
@@ -177,21 +207,32 @@ export function editorReducer(
             ? remaining[0]!.id
             : state.activeScreenId,
         selectedWidgetId: null,
+        pinnedScreenNames: prefs.pinned,
+        screenOrder: prefs.order,
+        prefsDirty: prefs.changed || state.prefsDirty,
       };
     }
 
     case "REMOVE_SCREEN": {
+      const target = state.screens.find((s) => s.id === action.payload.id);
       const remaining = state.screens.filter(
         (s) => s.id !== action.payload.id
       );
+      const targetName = target?.originalName;
+      const prefs = targetName
+        ? prefsWithoutName(state.pinnedScreenNames, state.screenOrder, targetName)
+        : { pinned: state.pinnedScreenNames, order: state.screenOrder, changed: false };
       if (remaining.length === 0) {
         const id = uuidv4();
-        const fresh = { id, name: "Screen 1", widgets: [] };
+        const fresh = { id, name: nextDefaultScreenName([]), widgets: [] };
         return {
           ...state,
           screens: [fresh],
           activeScreenId: id,
           selectedWidgetId: null,
+          pinnedScreenNames: prefs.pinned,
+          screenOrder: prefs.order,
+          prefsDirty: prefs.changed || state.prefsDirty,
         };
       }
       return {
@@ -202,6 +243,9 @@ export function editorReducer(
             ? remaining[0]!.id
             : state.activeScreenId,
         selectedWidgetId: null,
+        pinnedScreenNames: prefs.pinned,
+        screenOrder: prefs.order,
+        prefsDirty: prefs.changed || state.prefsDirty,
       };
     }
 
@@ -299,6 +343,61 @@ export function editorReducer(
 
     case "MARK_CAN_IDS_CLEAN":
       return { ...state, canIdsDirty: false };
+
+    case "SET_SCREEN_PREFS": {
+      return {
+        ...state,
+        pinnedScreenNames: new Set(action.payload.pinnedNames),
+        screenOrder: [...action.payload.order],
+        prefsDirty: false,
+      };
+    }
+
+    case "TOGGLE_PIN_SCREEN": {
+      const next = new Set(state.pinnedScreenNames);
+      if (next.has(action.payload.name)) next.delete(action.payload.name);
+      else next.add(action.payload.name);
+      return { ...state, pinnedScreenNames: next, prefsDirty: true };
+    }
+
+    case "REORDER_SCREENS": {
+      return { ...state, screenOrder: [...action.payload.orderedNames], prefsDirty: true };
+    }
+
+    case "RENAME_SCREEN_IN_PREFS": {
+      const { oldName, newName } = action.payload;
+      const nextPinned = new Set<string>();
+      for (const n of state.pinnedScreenNames) {
+        nextPinned.add(n === oldName ? newName : n);
+      }
+      const nextOrder = state.screenOrder.map((n) => (n === oldName ? newName : n));
+      return { ...state, pinnedScreenNames: nextPinned, screenOrder: nextOrder, prefsDirty: true };
+    }
+
+    case "MARK_PREFS_CLEAN":
+      return { ...state, prefsDirty: false };
+
+    case "CLEANUP_STALE_PREFS": {
+      const liveNames = new Set<string>();
+      for (const s of state.screens) {
+        if (s.originalName) liveNames.add(s.originalName);
+      }
+      const nextPinned = new Set<string>();
+      for (const n of state.pinnedScreenNames) {
+        if (liveNames.has(n)) nextPinned.add(n);
+      }
+      const nextOrder = state.screenOrder.filter((n) => liveNames.has(n));
+      const changed =
+        nextPinned.size !== state.pinnedScreenNames.size ||
+        nextOrder.length !== state.screenOrder.length;
+      if (!changed) return state;
+      return {
+        ...state,
+        pinnedScreenNames: nextPinned,
+        screenOrder: nextOrder,
+        prefsDirty: true,
+      };
+    }
 
     default:
       return state;

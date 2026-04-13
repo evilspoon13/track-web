@@ -80,12 +80,20 @@ export interface ScreenState {
   isDirty?: boolean; // Track if screen has unsaved changes
 }
 
+export interface ScreenPrefs {
+  pinnedNames: string[];
+  order: string[];
+}
+
 export interface EditorState {
   screens: ScreenState[];
   activeScreenId: string;
   selectedWidgetId: string | null;
   frameParserConfig: FrameParserConfig;
   canIdsDirty: boolean;
+  pinnedScreenNames: Set<string>;
+  screenOrder: string[];
+  prefsDirty: boolean;
 }
 
 export interface SavedLayout {
@@ -147,6 +155,12 @@ export type EditorAction =
   | { type: "REMOVE_SCREEN"; payload: { id: string } }
   | { type: "REMOVE_SCREEN_BY_NAME"; payload: { name: string } }
   | { type: "UPSERT_SCREEN"; payload: { name: string; widgets: PlacedWidget[] } }
+  | { type: "SET_SCREEN_PREFS"; payload: ScreenPrefs }
+  | { type: "TOGGLE_PIN_SCREEN"; payload: { name: string } }
+  | { type: "REORDER_SCREENS"; payload: { orderedNames: string[] } }
+  | { type: "RENAME_SCREEN_IN_PREFS"; payload: { oldName: string; newName: string } }
+  | { type: "MARK_PREFS_CLEAN" }
+  | { type: "CLEANUP_STALE_PREFS" }
   | { type: "SET_ACTIVE_SCREEN"; payload: { id: string } }
   | { type: "SET_SCREEN_NAME"; payload: { id: string; name: string } }
   | { type: "UPDATE_ORIGINAL_NAME"; payload: { id: string; originalName: string } }
