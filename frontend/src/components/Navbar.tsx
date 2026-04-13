@@ -70,7 +70,7 @@ export default function Navbar() {
   const handleDbcUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.endsWith(".dbc")) {
+    if (!file.name.toLowerCase().endsWith(".dbc")) {
       setDbcStatus("Error: must be a .dbc file");
       e.target.value = "";
       return;
