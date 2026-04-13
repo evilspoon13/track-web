@@ -24,18 +24,30 @@ export default function Navbar() {
   const [dbcStatus, setDbcStatus] = useState<string>("");
 
   const activeScreen = state.screens.find((s) => s.id === state.activeScreenId);
+  const dirtyScreenCount = state.screens.filter((s) => s.isDirty).length;
+  const anyScreenDirty = dirtyScreenCount > 0;
 
   const executeSave = async () => {
-    if (!activeScreen) return;
-    await saveScreen(
-      { name: activeScreen.name, widgets: activeScreen.widgets },
-      state.frameParserConfig
+    const dirtyScreens = state.screens.filter((s) => s.isDirty);
+    const targets =
+      dirtyScreens.length > 0
+        ? dirtyScreens
+        : activeScreen
+          ? [activeScreen]
+          : [];
+
+    await Promise.all(
+      targets.map((s) =>
+        saveScreen({ name: s.name, widgets: s.widgets }, state.frameParserConfig)
+      )
     );
-    dispatch({
-      type: "UPDATE_ORIGINAL_NAME",
-      payload: { id: activeScreen.id, originalName: activeScreen.name },
-    });
-    dispatch({ type: "MARK_CLEAN", payload: { id: activeScreen.id } });
+    for (const s of targets) {
+      dispatch({
+        type: "UPDATE_ORIGINAL_NAME",
+        payload: { id: s.id, originalName: s.name },
+      });
+      dispatch({ type: "MARK_CLEAN", payload: { id: s.id } });
+    }
     if (state.canIdsDirty) {
       await saveDbc(state.frameParserConfig);
       dispatch({ type: "MARK_CAN_IDS_CLEAN" });
@@ -88,9 +100,14 @@ export default function Navbar() {
     e.target.value = "";
   };
 
+  const screenSummary = dirtyScreenCount > 1
+    ? `${dirtyScreenCount} screens`
+    : dirtyScreenCount === 1
+      ? "1 screen"
+      : "the current screen";
   const saveModalMessage = state.canIdsDirty
-    ? "This will save the current screen configuration and CAN ID definitions."
-    : "This will save the current screen configuration.";
+    ? `This will save ${screenSummary} and CAN ID definitions.`
+    : `This will save ${screenSummary}.`;
 
   return (
     <>
@@ -213,7 +230,7 @@ export default function Navbar() {
             <button
               onClick={handleSave}
               className={`relative flex flex-1 flex-col items-center justify-center gap-1 rounded py-3 transition-colors duration-200 ${
-                activeScreen?.isDirty || state.canIdsDirty
+                anyScreenDirty || state.canIdsDirty
                   ? "bg-gray-700 hover:bg-teal-700"
                   : "bg-gray-700 hover:bg-blue-700"
               }`}
@@ -223,7 +240,7 @@ export default function Navbar() {
               <span className="text-xs text-white">
                 {saveStatus || "Save"}
               </span>
-              {(activeScreen?.isDirty || state.canIdsDirty) && (
+              {(anyScreenDirty || state.canIdsDirty) && (
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-teal-500" />
               )}
             </button>
