@@ -1,13 +1,22 @@
 # Data Model — Firestore Schema
 
-All persistent data is stored in Firebase Firestore. There are two top-level collections (`users`, `devices`) and three subcollections under each device.
+All persistent data lives in Firebase Firestore. There are two top-level collections (`users`, `devices`). User-scoped data (prefs) sits under `users/{uid}`; device-scoped data (screens, DBC, logs, sync files) sits under `devices/{deviceId}`.
 
 ## ER Diagram
 
 ```mermaid
 erDiagram
     USER {
-        string device_id FK "references devices"
+        string device_id "FK → devices/{deviceId}"
+        string email
+        string displayName
+        Timestamp createdAt
+    }
+
+    USER_PREFS_SCREENS {
+        string[] pinnedNames
+        string[] order
+        Timestamp updatedAt
     }
 
     DEVICE {
@@ -32,54 +41,45 @@ erDiagram
     }
 
     LOG_CHUNK {
-        string session "e.g. sim_1617300000000.bin"
-        number startTs "ms"
-        number endTs "ms"
+        string session
+        number startTs
+        number endTs
         number count
         LogChunkEntry[] entries
         Timestamp createdAt
     }
 
+    FILE_STATE {
+        string file_id PK
+        number version_id
+        string content_b64
+        string modified_by "cloud|pi"
+        number modified_at_ms
+        string change_id
+        number content_size
+    }
+
     WIDGET_INFO {
         string type "gauge|bar|number|indicator|graph"
         boolean alarm
-        number x
-        number y
-        number width
-        number height
-        number can_id
-        string can_id_label
-        string signal
-        string unit
-        number min
-        number max
-        number caution_threshold
-        number critical_threshold
-    }
-
-    GRAPH_INFO {
-        string mode "time_series|xy"
-        number window_seconds "optional"
-        number max_points
-        number x_can_id "optional, xy mode"
-        string x_signal "optional"
-        string x_unit "optional"
-        number x_min "optional"
-        number x_max "optional"
+        PositionInfo position
+        DataInfo data
+        GraphInfo graph "optional"
     }
 
     LOG_CHUNK_ENTRY {
-        number ts "Unix ms"
+        number ts
         number can_id
-        number value "decoded signal"
+        number value
     }
 
     USER ||--o| DEVICE : "linked via device_id"
+    USER ||--|| USER_PREFS_SCREENS : "prefs/screens"
     DEVICE ||--o{ SCREEN : "screens subcollection"
     DEVICE ||--|| DBC_CONTENT : "dbc/content"
     DEVICE ||--o{ LOG_CHUNK : "logs subcollection"
+    DEVICE ||--o{ FILE_STATE : "files subcollection"
     SCREEN ||--|{ WIDGET_INFO : "widgets array"
-    WIDGET_INFO ||--o| GRAPH_INFO : "graph (optional)"
     LOG_CHUNK ||--|{ LOG_CHUNK_ENTRY : "entries array"
 ```
 
@@ -89,6 +89,14 @@ erDiagram
 users/
   {uid}
     - device_id: string
+    - email: string
+    - displayName: string
+    - createdAt: Timestamp
+
+    prefs/screens                    # single doc under the prefs subcollection
+      - pinnedNames: string[]
+      - order: string[]
+      - updatedAt: Timestamp
 
 devices/
   {deviceId}
@@ -116,6 +124,15 @@ devices/
       - count: number
       - entries: LogChunkEntry[]
       - createdAt: Timestamp
+
+    files/{fileId}                   # versioned sync store; fileId in { graphics, display_dbc }
+      - file_id: string
+      - version_id: number
+      - content_b64: string
+      - modified_by: "cloud" | "pi"
+      - modified_at_ms: number
+      - change_id: string
+      - content_size: number
 ```
 
 ---
@@ -124,15 +141,30 @@ devices/
 
 ### `users/{uid}`
 
-Links a Firebase Auth user to a device.
+Firebase Auth user metadata and device link.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `device_id` | string | References `devices/{deviceId}` |
+| `device_id` | string | References `devices/{deviceId}` (set by `registerDevice` or resolved on WSS auth) |
+| `email` | string | From Firebase Auth user profile (written by frontend on first sign-in) |
+| `displayName` | string | From Firebase Auth user profile |
+| `createdAt` | Timestamp | Server timestamp of first sign-in |
 
-Set by `requireAuth` middleware or device registration. Document ID is the Firebase UID.
+**Source:** `frontend/src/AppWithAuth.tsx`, `backend/src/modules/devices/devices.service.ts`, `backend/src/modules/realtime/realtime.service.ts` (`resolveDeviceIdForUid`).
 
-**Source:** `middleware/auth.ts`, `modules/devices/devices.service.ts`
+---
+
+### `users/{uid}/prefs/screens`
+
+Per-user screen prefs — pinned names and manual ordering of the `ScreenTabs` list. User-scoped, not device-scoped.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pinnedNames` | string[] | Screen names that are pinned to the top |
+| `order` | string[] | Manual order for **unpinned** screens |
+| `updatedAt` | Timestamp | Server timestamp |
+
+**Source:** `backend/src/modules/prefs/prefs.service.ts`.
 
 ---
 
@@ -144,13 +176,13 @@ Registered Pi device and its team membership.
 |-------|------|-------------|
 | `device_id` | string | Unique device identifier (same as doc ID) |
 | `teamMembers` | string[] | Normalized email addresses |
-| `memberUids` | string[] | Firebase UIDs of team members |
-| `connected` | boolean | Whether the Pi is connected via WebSocket |
-| `lastSeen` | Timestamp | Last heartbeat from Pi |
-| `hostname` | string (optional) | Device hostname |
+| `memberUids` | string[] | Firebase UIDs resolved from `teamMembers` |
+| `connected` | boolean | Whether the Pi is currently connected via `/ws/pi` |
+| `lastSeen` | Timestamp | Last heartbeat from the Pi |
+| `hostname` | string? | Device hostname (optional, reported via heartbeat) |
 | `updatedAt` | Timestamp | Server timestamp |
 
-**Source:** `modules/devices/devices.service.ts`
+**Source:** `backend/src/modules/devices/devices.service.ts`.
 
 ---
 
@@ -158,7 +190,7 @@ Registered Pi device and its team membership.
 
 ### `screens/{screenId}`
 
-Dashboard screen layout consumed by the graphics-engine on the Pi.
+Dashboard screen layout consumed by the graphics-engine on the Pi. `screenId` is the screen name.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -174,22 +206,22 @@ Dashboard screen layout consumed by the graphics-engine on the Pi.
 | `alarm` | boolean | Whether alarm thresholds are active |
 | `position` | PositionInfo | Grid placement |
 | `data` | DataInfo | CAN signal binding |
-| `graph` | GraphInfo (optional) | Graph-specific settings |
+| `graph` | GraphInfo (optional) | Graph-specific settings (only present for `type === "graph"`) |
 
 #### PositionInfo
 
 | Field | Type |
 |-------|------|
-| `x` | number |
-| `y` | number |
-| `width` | number |
-| `height` | number |
+| `x` | number (0-based column) |
+| `y` | number (0-based row) |
+| `width` | number (cells) |
+| `height` | number (cells) |
 
 #### DataInfo
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `can_id` | number | CAN message ID |
+| `can_id` | number | CAN message ID (integer on Firestore; pushed to the Pi as hex string by `normalizeConfigForPi`) |
 | `can_id_label` | string | Human-readable frame label |
 | `signal` | string | Signal name within the CAN message |
 | `unit` | string | Display unit |
@@ -203,15 +235,15 @@ Dashboard screen layout consumed by the graphics-engine on the Pi.
 | Field | Type | Description |
 |-------|------|-------------|
 | `mode` | `"time_series"` \| `"xy"` | Graph mode |
-| `window_seconds` | number (optional) | Time window for time-series mode |
+| `window_seconds` | number? | Time window (time_series mode) |
 | `max_points` | number | Max data points to display |
-| `x_can_id` | number (optional) | X-axis CAN ID (XY mode) |
-| `x_signal` | string (optional) | X-axis signal name |
-| `x_unit` | string (optional) | X-axis unit |
-| `x_min` | number (optional) | X-axis minimum |
-| `x_max` | number (optional) | X-axis maximum |
+| `x_can_id` | number? | X-axis CAN ID (xy mode) |
+| `x_signal` | string? | X-axis signal name |
+| `x_unit` | string? | X-axis unit |
+| `x_min` | number? | X-axis minimum |
+| `x_max` | number? | X-axis maximum |
 
-**Source:** `modules/graphics/graphics.service.ts`, `modules/graphics/graphics.types.ts`
+**Source:** `backend/src/modules/graphics/graphics.service.ts`, `backend/src/modules/graphics/graphics.types.ts`.
 
 ---
 
@@ -246,7 +278,7 @@ FrameSignal {
 }
 ```
 
-**Source:** `modules/dbc/dbc.service.ts`, `modules/dbc/dbc.types.ts`
+**Source:** `backend/src/modules/dbc/dbc.service.ts`, `backend/src/modules/dbc/dbc.types.ts`.
 
 ---
 
@@ -256,7 +288,7 @@ Telemetry log entries uploaded by the Pi via WebSocket, stored in chunks (max 30
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session` | string | Session identifier (e.g., `"sim_1617300000000.bin"`) |
+| `session` | string | Session identifier (e.g., `"sim_1617300000000"`) |
 | `startTs` | number | Timestamp (ms) of first entry in chunk |
 | `endTs` | number | Timestamp (ms) of last entry in chunk |
 | `count` | number | Number of entries in this chunk |
@@ -271,14 +303,33 @@ Telemetry log entries uploaded by the Pi via WebSocket, stored in chunks (max 30
 | `can_id` | number | CAN message ID |
 | `value` | number | Decoded signal value |
 
-Binary format on the wire from Pi: 24 bytes per entry (`int64 ts` + `uint32 can_id` + `uint32 pad` + `double value`). Decoded and stored as JSON.
+Binary wire format from Pi: 24 bytes per entry (`int64 ts` + `uint32 can_id` + `uint32 pad` + `double value`). Uploaded as base64 chunks over `/ws/pi`, then decoded server-side and stored as JSON.
 
-**Source:** `modules/logs/logs.service.ts`, `modules/logs/logs.types.ts`, `modules/realtime/realtime.service.ts`
+**Source:** `backend/src/modules/logs/logs.service.ts`, `backend/src/modules/realtime/realtime.service.ts`.
+
+---
+
+### `files/{fileId}`
+
+Versioned snapshot store for the cloud ↔ Pi sync protocol. `fileId` is one of the sync service constants (`graphics`, `display_dbc`). Every save to `screens/` or `dbc/content` also writes a new revision here so the Pi can fast-forward on reconnect.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file_id` | string | Logical file identifier |
+| `version_id` | number | Monotonic revision number |
+| `content_b64` | string | File payload, base64-encoded |
+| `modified_by` | `"cloud"` \| `"pi"` | Which side wrote this revision |
+| `modified_at_ms` | number | Wall-clock time of commit (ms) |
+| `change_id` | string | Idempotency key (UUID) — repeated `commit` calls with the same id return the same revision |
+| `content_size` | number | Payload byte length |
+
+**Source:** `backend/src/modules/sync/sync.service.ts`, `backend/src/modules/sync/sync.types.ts`.
 
 ---
 
 ## Notes
 
 - All `updatedAt` / `createdAt` fields use `FieldValue.serverTimestamp()`.
-- The `users` doc is created implicitly when `requireAuth` middleware or device registration links a user to a device.
-- Screens are pushed to the Pi over WebSocket (`/ws/pi`) whenever they are saved.
+- Every screen write is followed by a `commitCloudGeneratedGraphics(deviceId, payload)` call that rebuilds the full screen set and commits it to `files/graphics`; the resulting `sync_download` message is what actually reaches the Pi.
+- The `users/{uid}` doc is written in two places: the frontend writes `email` / `displayName` / `createdAt` on sign-in; the backend writes `device_id` when the user is linked to a device (either via `registerDevice` or resolved at WSS auth).
+- Backend broadcasts after every write: `screen_updated` / `screen_deleted` go to all `/ws/client` sockets matching the same `deviceId`; `screen_prefs_updated` goes to all sockets matching the same `uid`.

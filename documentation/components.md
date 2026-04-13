@@ -1,233 +1,244 @@
 # Key Component Reference
 
-Eight components make up the core of the editor. Each entry covers purpose, file location, state consumed from `EditorContext`, actions dispatched, and any side-effects or API calls.
+The editor UI is built from a small set of stateful components. Each entry below covers purpose, file location, state consumed from `EditorContext` / `TelemetryContext`, actions dispatched, and notable side-effects or API calls.
 
 ---
 
 ## EditorLayout
 
-**Purpose:** Top-level shell for the editor UI. Owns the drag-and-drop context, page switching (`display` / `telemetry` / `logs`), and cell size calculation. It is the parent of every other editor component.
+**Purpose:** Top-level shell for the authenticated app. Owns the drag-and-drop context, the page switcher (`display` | `telemetry` | `logs` | `device`), the header (logo, tab strip with animated underline, connection dot, user menu), and cell-size computation for the grid.
 
 **Location:** `src/EditorLayout.tsx`
 
 **State consumed:**
 - `state.screens` — to pass the active screen's widgets to `GridCanvas`
 - `state.activeScreenId` — to find the active screen
-- `state.selectedWidgetId` — passed down to `ConfigPanel`
+- `connected` (from `useTelemetry`) — to render the header connection dot
 
 **Local state:**
-- `page` — current view (`"display"` | `"telemetry"` | `"logs"`)
-- `cellWidth` / `cellHeight` — computed pixel size of each grid cell, recalculated on window resize
+- `page` — current view (`"display"` | `"telemetry"` | `"logs"` | `"device"`)
+- `cellSize` — computed `{ w, h }` of each grid cell, recalculated on window resize
+- `activeType` / `activeWidgetId` — currently dragged palette type or existing widget ID
+- `settingsOpen` — user menu dropdown state
+- `indicator` — pixel position + width of the active tab underline
 
 **Actions dispatched:**
+- `ADD_WIDGET` — on drag-end when dropping from the palette (tries default size, falls back to other allowed sizes, aborts if nothing fits)
 - `MOVE_WIDGET` — on drag-end when moving an existing widget
-- `ADD_WIDGET` — on drag-end when dropping a new widget from the palette
 
 **Side-effects:**
-- Attaches a `resize` event listener on mount to recompute `cellWidth`/`cellHeight`
-- Manages `@dnd-kit` `DndContext` with `restrictToWindowEdge` modifier
+- `resize` listener that re-fits the canvas to `10 / 6` aspect ratio
+- Renders a `DragOverlay` with a bouncy drop animation for the active preview widget
 
 ---
 
 ## Navbar
 
-**Purpose:** Left sidebar that hosts the widget palette, screen load/save/delete controls, DBC upload, and driver display selector. The primary entry point for most user-initiated actions.
+**Purpose:** Left sidebar on the Editor page. Hosts the DBC upload control, the widget palette (5 types), the `ScreenTabs` list, and the Save / Clear / Delete action buttons with confirmation modals.
 
 **Location:** `src/components/Navbar.tsx`
 
 **State consumed:**
-- `state.screens` — to list screens in save modal and check dirty flags
-- `state.frameParserConfig` — passed to `CanIdConfigurator` and used during save
-- `state.driverDisplayScreen` — shown in driver display selector
-- `state.driverDisplayDirty`, `state.canIdsDirty` — to determine orange dot on Save button
+- `state.screens` — to count dirty screens and find the active screen
+- `state.frameParserConfig` — passed as `can_id_label` lookup during save
+- `state.canIdsDirty` — drives the "and CAN ID definitions" line in the save modal and the orange dot on the Save button
 
 **Actions dispatched:**
-- `ADD_SCREEN` — new screen button
-- `REMOVE_SCREEN` — delete screen button
-- `CLEAR_SCREEN` — clear all widgets on active screen
-- `SET_DRIVER_DISPLAY` — driver display dropdown selection
-- `MARK_CLEAN`, `MARK_DRIVER_DISPLAY_CLEAN`, `MARK_CAN_IDS_CLEAN` — after successful save
-- `UPDATE_ORIGINAL_NAME` — after save to track backend name for rename detection
-- `SET_FRAME_PARSER_CONFIG` — after DBC upload, replaces all frame definitions
-- `LOAD_SCREEN` — after loading a screen from backend
+- `SET_FRAME_PARSER_CONFIG`, `MARK_CAN_IDS_CLEAN` — after a DBC upload
+- `UPDATE_ORIGINAL_NAME`, `MARK_CLEAN` — per screen after a successful save
+- `CLEAR_SCREEN` — Clear button
+- `REMOVE_SCREEN` — Delete Screen button
 
-**API calls (via layoutIO.ts):**
-- `saveScreen()` → POST `/api/graphics/screens/{name}`
-- `deleteScreen()` → DELETE `/api/graphics/screens/{name}`
-- `setDriverDisplay()` → POST `/api/graphics/driver-display`
-- `saveDbc()` → POST `/api/dbc`
-- `uploadDbc()` → POST `/api/dbc/upload`
-- `listScreens()` → GET `/api/graphics/screens`
-- `loadScreen()` → GET `/api/graphics/screens/{name}`
+**API calls (via `layoutIO.ts`):**
+- `uploadDbc(content)` → POST `/api/dbc/upload`
+- `saveScreen(screen, fpc)` → POST `/api/graphics/screens/{name}` — called in parallel for **every dirty screen** on a single save click (not just the active one)
+- `saveDbc(fpc)` → POST `/api/dbc`
+- `deleteScreen(name)` → DELETE `/api/graphics/screens/{name}`
+
+**Notes:**
+- The Save modal reports what will actually happen: either `"This will save N screens and CAN ID definitions."` or the subset that applies.
+- Save button glows teal when any screen is dirty or `canIdsDirty`; otherwise hovers to blue.
 
 ---
 
 ## ScreenTabs
 
-**Purpose:** Horizontal tab strip above the canvas. Lets the user switch between open screens, rename them inline, and delete them.
+**Purpose:** Vertical tab list inside `Navbar`. Splits screens into two sections — **pinned** (static order, always on top) and **unpinned** (drag-reorderable). Supports inline rename, pin/unpin, bulk selection with checkboxes, and bulk delete with a confirmation modal.
 
 **Location:** `src/components/ScreenTabs.tsx`
 
 **State consumed:**
-- `state.screens` — to render a tab for each screen
-- `state.activeScreenId` — to highlight the active tab
+- `state.screens` / `state.activeScreenId`
+- `state.pinnedScreenNames` — `Set<string>` of screen names that are pinned
+- `state.screenOrder` — `string[]` of screen names in user-chosen order (unpinned section)
+- `state.frameParserConfig` — passed to `saveScreen` on rename
 
 **Local state:**
-- `editingId` — which tab is currently in inline rename mode
-- `editValue` — current text in the rename input
+- `editingId`, `editValue`, `error` — inline rename state
+- `selectedIds` — bulk-select checkboxes
+- `showBulkDelete` — confirm modal visibility
 
 **Actions dispatched:**
-- `SET_ACTIVE_SCREEN` — clicking a tab
-- `SET_SCREEN_NAME` — committing a rename (Enter / blur)
-- `REMOVE_SCREEN` — clicking the X on a tab
+- `SET_ACTIVE_SCREEN` — tab click
+- `SET_SCREEN_NAME`, `UPDATE_ORIGINAL_NAME`, `RENAME_SCREEN_IN_PREFS` — on rename commit
+- `REMOVE_SCREEN` — X / trash on a single tab
+- `REMOVE_SCREENS_BY_IDS` — bulk delete confirm
+- `TOGGLE_PIN_SCREEN` — pin icon click (pinning / unpinning auto-saves via the prefs debounce)
+- `REORDER_SCREENS` — after an `@dnd-kit/sortable` drag-end in the unpinned section
+- `ADD_SCREEN` — the `+ New Screen` button
 
-**Visual indicator:** An orange dot is shown on tabs where `screen.isDirty === true`.
+**API calls:**
+- `deleteScreen(name)` — called for each `originalName` in a bulk delete, and also on rename to remove the old doc before saving the new one
+- `saveScreen(...)` — called on rename commit to save the renamed screen
+
+**Notes:**
+- `partitionScreens()` is the canonical ordering logic: pinned names in `pinnedScreenNames` iteration order, then saved unpinned names in `screenOrder`, then any saved screens missing from `screenOrder`, then drafts (no `originalName`).
+- Drafts (unsaved new screens) cannot be pinned and cannot be selected for bulk delete.
+- The inner sortable `DndContext` stops `pointerdown` propagation so the outer widget `DndContext` in `EditorLayout` isn't triggered.
 
 ---
 
 ## GridCanvas
 
-**Purpose:** The 10×6 droppable surface. Renders the grid lines and all `PlacedWidget` instances for the active screen. Reports drop positions back to `EditorLayout` via a callback.
+**Purpose:** The 10×6 droppable surface. Renders grid cells and all `PlacedWidget` instances for the active screen. Drop coordinate math (`pixelToGrid`, collision fallback to other allowed sizes) is handled by `EditorLayout` — this component is just a droppable container.
 
 **Location:** `src/components/GridCanvas.tsx`
 
-**Props:**
-- `widgets: PlacedWidget[]` — widgets to render
-- `cellWidth`, `cellHeight` — pixel dimensions of each cell
-- `selectedWidgetId` — which widget to highlight
+**Props:** `cellWidth`, `cellHeight`.
 
-**State consumed:** None directly (data passed via props from `EditorLayout`).
-
-**Actions dispatched:**
-- `SELECT_WIDGET` — clicking on a widget or clicking the empty grid
-
-**Notes:**
-- Uses `@dnd-kit` `useDroppable` to receive drag events from `EditorLayout`
-- Drop coordinate math (`pixelToGrid`) happens in `EditorLayout`, not here
+**Actions dispatched:** `SELECT_WIDGET` — on empty-grid click (deselect).
 
 ---
 
 ## ConfigPanel
 
-**Purpose:** Right-side property editor. Appears when a widget is selected. Lets the user bind the widget to a CAN signal and configure its display properties.
+**Purpose:** Right-side scrollable property editor. Top half is the always-visible `CanIdConfigurator`. Bottom half is the widget property form, which appears once a widget is selected. A pinned "Delete Widget" button sits at the bottom.
 
 **Location:** `src/components/ConfigPanel.tsx`
 
 **State consumed:**
-- `state.selectedWidgetId` — to find the widget being edited
-- `state.screens` / `state.activeScreenId` — to read current widget data
-- `state.frameParserConfig` — to populate CAN ID and signal dropdowns
+- `state.selectedWidgetId`, `state.screens`, `state.activeScreenId` — to resolve the widget being edited
+- `state.frameParserConfig` — to populate Frame + Signal dropdowns
 
 **Actions dispatched:**
-- `UPDATE_WIDGET_DATA` — any field change (CAN ID, signal, unit, min, max, thresholds, alarm)
-- `RESIZE_WIDGET` — size selector dropdown change
-- `REMOVE_WIDGET` — delete button
+- `UPDATE_WIDGET_DATA` — any field change (frame, signal, unit, min, max, caution/critical, alarm toggle, graph config)
+- `RESIZE_WIDGET` — Size dropdown change
+- `REMOVE_WIDGET` — Delete Widget button
+
+**Form layout:**
+- Frame + Signal (2-col)
+- Unit + [Size + Alarm toggle] (2-col)
+- Min + Max (2-col)
+- Caution + Critical (2-col)
+- For `graph` widgets: Mode (time_series | xy), Max Points, Window (time_series) or X Frame / X Signal / X Unit / X Min / X Max (xy)
 
 **Notes:**
-- Size dropdown only shows options from `allowedSizes` that would not cause a collision with other widgets (`hasCollision` check before rendering each option)
-- CAN ID dropdown populates from `frameParserConfig` keys; signal dropdown populates from the selected frame's `signals` array
+- The Size dropdown only offers sizes that would not collide with other widgets (checked via `hasCollision`), and always includes the currently selected size.
+- Field dropdowns use the `AnimatedSelect` component rather than native `<select>` for consistent dark-theme styling.
 
 ---
 
 ## CanIdConfigurator
 
-**Purpose:** Modal for manually managing CAN frame definitions. Alternative to uploading a .dbc file. Lets the user add frames, define signals per frame, and delete frames.
+**Purpose:** Inline panel (embedded in `ConfigPanel`) for managing CAN frame definitions manually. Complements DBC upload in `Navbar`.
 
 **Location:** `src/components/CanIdConfigurator.tsx`
 
-**Props:**
-- `frameParserConfig: FrameParserConfig` — current frame definitions
-- `onClose` — dismiss callback
+**Actions dispatched (via context):** `ADD_CAN_FRAME`, `UPDATE_CAN_FRAME`, `REMOVE_CAN_FRAME`. All three flip `canIdsDirty = true`.
 
-**State consumed:** None from context (receives config as props).
+**Notes:** Each frame has a `can_id_label` plus an array of `FrameSignal` entries (`name`, `start_byte`, `length`, `type`, `scale`, `offset`).
 
-**Actions dispatched (via parent callback):**
-- `ADD_CAN_FRAME` — user adds a new frame
-- `UPDATE_CAN_FRAME` — user edits an existing frame or its signals
-- `REMOVE_CAN_FRAME` — user deletes a frame
+---
 
-**Notes:**
-- Each frame has a `can_id_label` (human-readable name) and an array of `FrameSignal` objects
-- Signal fields: `name`, `start_byte`, `length`, `type` (SignalType), `scale`, `offset`
+## AnimatedSelect
+
+**Purpose:** Reusable custom select dropdown with an animated open, dark theme, and outside-click dismiss. Replaces native `<select>` in `ConfigPanel`.
+
+**Location:** `src/components/AnimatedSelect.tsx`
+
+**Props:** `value`, `onChange(value)`, `options: { value, label }[]`, `disabled?`, `className?`, `style?`.
 
 ---
 
 ## TelemetryPage
 
-**Purpose:** Live telemetry dashboard. Subscribes to the backend WebSocket and renders signal cards using the driver display screen's widget configuration.
+**Purpose:** Live telemetry dashboard. Renders one auto-scaling line-graph card per signal currently streaming from `TelemetryContext`. No longer depends on the editor's widget config — every incoming signal gets its own `GraphCard` and the grid auto-tiles (1–2–3 columns based on signal count, with the last row stretching to fill).
 
 **Location:** `src/components/TelemetryPage.tsx`
 
 **State consumed:**
-- `state.driverDisplayScreen` — which screen's widget config to use for cards
-- `state.screens` — to look up the driver display screen's widget array
-- `state.frameParserConfig` — to resolve signal names
+- `frameParserConfig` — to resolve `{canId}:{signal}` keys into human-readable frame labels
+- `signals` (from `useTelemetry`) — rolling 30-value history per signal key
 
-**Local state:**
-- `signalHistory: Map<string, number[]>` — rolling buffer of last 30 values per signal
-- `connected: boolean` — WebSocket connection status
+**GraphCard features:**
+- SVG polyline + faded area fill
+- 4-tick Y-axis (auto-scaled to `min / max` of the rolling window)
+- Current value displayed top-right
+- Hover cursor + tooltip with the exact value at that x position
 
-**Side-effects:**
-- Opens a WebSocket to `ws://{host}/ws/client` on mount
-- Sends `{ type: "auth", token }` message immediately after connect
-- Parses `{ type: "Telemetry", payload: { signals } }` messages and updates `signalHistory`
-- Closes WebSocket on unmount
-
-**Card types rendered per widget.type:**
-
-| type | Renders |
-|------|---------|
-| `gauge` | Circular arc gauge with caution/critical color zones |
-| `bar` | Horizontal fill bar, color-coded by threshold |
-| `number` | Large numeric value with unit label |
-| `graph` | Scrolling line graph over last 30 values |
-| `indicator` | Colored dot (green / yellow / red) |
+**Notes:**
+- The TelemetryContext WebSocket is shared with `LogTerminalPage` — `TelemetryPage` does not open its own socket.
 
 ---
 
 ## LogTerminalPage
 
-**Purpose:** Resizable split-panel log viewer. History panel on the left, live telemetry feed on the right, separated by a draggable divider. Supports day-based log browsing with session grouping and XLSX export.
+**Purpose:** Resizable split-panel log viewer. History on the left (accordion of days → session groups → entries), live feed on the right, separated by a draggable divider persisted to `localStorage` under `log-split-pct` (default 33, clamped 20–80).
 
 **Location:** `src/components/LogTerminalPage.tsx`
 
 **State consumed:**
-- `useTelemetry()` — `rawMessages` (live signal stream) and `connected` (WebSocket status)
-- `useEditorState()` — `frameParserConfig` to resolve CAN IDs to human-readable frame names in the live feed
+- `rawMessages`, `connected` (from `useTelemetry`) — live feed content + header dot
+- `frameParserConfig` — resolves CAN IDs to frame labels in the live feed
 
 **Local state:**
-- `days: DaySummary[]` — list of available log days fetched on mount
-- `expandedDay: string | null` — which day is currently expanded in the history panel
-- `dayData: Record<string, DayData>` — per-day log entries, pagination cursor, and loading flag
-- `dateFilter: string` — date input value used to filter the day list
-- `downloading: string | null` — tracks which day (or `"all"`) is currently exporting
-- `leftPct: number` — left panel width percentage, initialized from `localStorage("log-split-pct")` (default 50)
-
-**Layout:**
-- Two panels in a horizontal flex container with a 4 px draggable divider between them
-- Divider width is clamped between 20% and 80%; final position is persisted to `localStorage` under the key `log-split-pct` on mouse-up
-- Left panel (history): hidden scrollbar, day-based accordion with session grouping
-- Right panel (live feed): themed scrollbar (dark gray track and thumb, visible on hover)
+- `days: DaySummary[]` + `daysLoading` — loaded on mount via `fetchLogDays()`
+- `expandedDay` + `dayData` — lazily paginated entries per day
+- `dateFilter` — date-input filter over the day list
+- `selectedDays: Set<string>` — checkbox selection used by "Download"
+- `downloading` — which day (or `"all"`) is currently exporting
+- `leftPct` — divider position, synced to `localStorage`
 
 **History panel features:**
-- Header contains a date filter input and a "DOWNLOAD ALL" button
-- Each day row shows a formatted date, entry count, and an XLSX download button
-- Clicking a day expands it and fetches the first 100 entries via `fetchLogs({ date, limit: 100 })`
-- Entries are grouped by `session` field with a separator between groups
-- A "load more" button at the bottom of an expanded day fetches the next page via cursor
+- Header: date filter, CLEAR button, Download button (downloads selected days if any are checked; otherwise downloads the filter result or all days)
+- Select-all checkbox and per-day checkboxes appear when the day list is non-empty
+- Per-day per-row: down-arrow accordion, formatted date, entry count, per-day CSV Download button
+- Expanding a day fetches the first 100 entries; a "load more" cursor-paginates the rest. Entries inside an expanded day are grouped by `session`.
 
 **Live feed panel features:**
-- Header shows a connection indicator dot (green/red) and status label
-- Renders `rawMessages` from `useTelemetry()`, resolving CAN IDs to frame names via `frameParserConfig`
-- Auto-scrolls to the bottom when the user is already near the bottom (`isAtBottomRef` threshold: 40 px)
+- Renders `rawMessages` from `useTelemetry` with resolved CAN IDs and signal names
+- Auto-scrolls to the bottom when the user is already near the bottom (40 px threshold); otherwise stays put
 
-**Side-effects:**
-- Fetches day list via `fetchLogDays()` on mount
-- Reads `localStorage("log-split-pct")` on mount to restore panel width
-- Writes `localStorage("log-split-pct")` on divider mouse-up
-- Attaches temporary `mousemove`/`mouseup` listeners on `document` during divider drag
+**Export format:**
+- CSV (pivoted: `timestamp` column + one column per signal, using `frame_name ?? 0x<can_id>` as the header)
+- Pages through `fetchLogs` with `limit=500` and the cursor until exhausted, then builds and downloads a single `Blob`
 
-**API calls (via layoutIO.ts):**
-- `fetchLogDays()` — list available log days with entry counts
-- `fetchLogs({ date, limit, before? })` — paginated log entries for a given day
-- XLSX export iterates all pages for a day (or all days) using `fetchLogs` in a loop, then writes via the `xlsx` library
+**API calls:** `fetchLogDays()`, `fetchLogs({ date, limit, before? })`.
+
+---
+
+## DevicePage
+
+**Purpose:** Device settings tab. Shows the linked Device ID (with copy-to-clipboard), the Pi's online/offline indicator, and a team-members list editor (add / remove emails, Save button with dirty tracking).
+
+**Location:** `src/components/DevicePage.tsx`
+
+**Local state:** `device`, `loadState` (`loading` | `loaded` | `no_device` | `error`), `members`, `newEmail`, `saving`, `status`, `copied`, `dirty`.
+
+**API calls:**
+- `GET /api/device` on mount
+- `POST /api/device/team-members` on Save (body: `{ team_members: string[] }`)
+
+**Notes:**
+- If the request returns 403 (caught as `DeviceNotRegisteredError` by `authFetch`), the page renders a "No Device Linked" help screen instructing the user to be added via the captive portal.
+- Loading uses its own shimmer layout rather than the global `EditorSkeleton`.
+
+---
+
+## EditorSkeleton
+
+**Purpose:** Full-screen shimmer layout shown during initial auth/data load in `AppWithAuth`. The `useDeferredSkeleton(active)` hook enforces a 150 ms "don't flash" delay and a 300 ms minimum visible duration once shown.
+
+**Location:** `src/components/EditorSkeleton.tsx`
+
+**Exports:** `EditorSkeleton` (default) and `useDeferredSkeleton`.
