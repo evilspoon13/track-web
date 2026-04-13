@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import type { ScreenInfo } from "./graphics.types";
 import * as graphicsService from "./graphics.service";
-import { sendConfigToPi } from "../realtime/realtime.service";
+import { sendConfigToPi, broadcastToDeviceClients } from "../realtime/realtime.service";
 
 async function pushFullConfigToPi(deviceId: string) {
   const allScreens = await graphicsService.getAllScreens(deviceId);
@@ -47,6 +47,7 @@ export async function deleteScreenById(req: Request<{ screenId: string }>, res: 
       res.status(404).json({ success: false });
       return;
     }
+    broadcastToDeviceClients(req.deviceId!, { type: "screen_deleted", name: screenName });
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ msg: error });
@@ -62,6 +63,7 @@ export async function updateScreen(req: Request<{ screenId: string }>, res: Resp
     const screenId = req.params.screenId;
     const screen = req.body as ScreenInfo;
     await graphicsService.saveScreen(req.deviceId, screenId, screen);
+    broadcastToDeviceClients(req.deviceId, { type: "screen_updated", name: screen.name, screen });
     await pushFullConfigToPi(req.deviceId);
     res.status(200).json({ success: true });
   } catch (error) {

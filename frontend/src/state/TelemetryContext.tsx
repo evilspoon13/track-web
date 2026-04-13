@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { LiveLogLine } from "../types";
+import { useEditorDispatch } from "./EditorContext";
+import { screenFromBackendPayload } from "../utils/layoutIO";
 
 const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
 const MAX_HISTORY = 30;
@@ -19,6 +21,7 @@ export function useTelemetry() {
 }
 
 export function TelemetryProvider({ children }: { children: ReactNode }) {
+  const editorDispatch = useEditorDispatch();
   const [signals, setSignals] = useState<Record<string, number[]>>({});
   const [rawMessages, setRawMessages] = useState<LiveLogLine[]>([]);
   const [connected, setConnected] = useState(false);
@@ -74,13 +77,29 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
 
       ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(event.data as string) as {
-            type: string;
-            payload: { signals?: Record<string, number> };
-          };
-          console.log("[TelemetryWS] message:", msg.type, msg.payload);
-          if (msg.type !== "Telemetry") return;
-          const incoming = msg.payload?.signals ?? {};
+          const msg = JSON.parse(event.data as string) as Record<string, unknown>;
+          const type = msg.type;
+
+          if (type === "screen_deleted" && typeof msg.name === "string") {
+            editorDispatch({ type: "REMOVE_SCREEN_BY_NAME", payload: { name: msg.name } });
+            return;
+          }
+
+          if (type === "screen_updated" && msg.screen && typeof msg.screen === "object") {
+            try {
+              const { name, widgets } = screenFromBackendPayload(
+                msg.screen as Parameters<typeof screenFromBackendPayload>[0]
+              );
+              editorDispatch({ type: "UPSERT_SCREEN", payload: { name, widgets } });
+            } catch {
+              // ignore malformed screen payload
+            }
+            return;
+          }
+
+          if (type !== "Telemetry") return;
+          const payload = msg.payload as { signals?: Record<string, number> } | undefined;
+          const incoming = payload?.signals ?? {};
           const now = Date.now();
 
           setSignals((prev) => {

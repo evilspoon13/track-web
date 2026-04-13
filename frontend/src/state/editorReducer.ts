@@ -129,6 +129,57 @@ export function editorReducer(
       };
     }
 
+    case "UPSERT_SCREEN": {
+      const { name, widgets } = action.payload;
+      const existing =
+        state.screens.find((s) => s.originalName === name) ??
+        state.screens.find((s) => !s.originalName && s.name === name);
+      if (existing) {
+        if (existing.isDirty) return state;
+        return {
+          ...state,
+          screens: state.screens.map((s) =>
+            s.id === existing.id
+              ? { ...s, name, originalName: name, widgets, isDirty: false }
+              : s
+          ),
+        };
+      }
+      const id = uuidv4();
+      return {
+        ...state,
+        screens: [
+          ...state.screens,
+          { id, name, originalName: name, widgets, isDirty: false },
+        ],
+      };
+    }
+
+    case "REMOVE_SCREEN_BY_NAME": {
+      const target = state.screens.find((s) => s.originalName === action.payload.name);
+      if (!target) return state;
+      const remaining = state.screens.filter((s) => s.id !== target.id);
+      if (remaining.length === 0) {
+        const id = uuidv4();
+        const fresh = { id, name: "Screen 1", widgets: [] };
+        return {
+          ...state,
+          screens: [fresh],
+          activeScreenId: id,
+          selectedWidgetId: null,
+        };
+      }
+      return {
+        ...state,
+        screens: remaining,
+        activeScreenId:
+          state.activeScreenId === target.id
+            ? remaining[0]!.id
+            : state.activeScreenId,
+        selectedWidgetId: null,
+      };
+    }
+
     case "REMOVE_SCREEN": {
       const remaining = state.screens.filter(
         (s) => s.id !== action.payload.id

@@ -106,6 +106,10 @@ function widgetToBackend(
   return base;
 }
 
+export function screenFromBackendPayload(payload: BackendScreenInfo): { name: string; widgets: PlacedWidget[] } {
+  return { name: payload.name, widgets: payload.widgets.map(widgetFromBackend) };
+}
+
 function widgetFromBackend(wi: BackendWidgetInfo): PlacedWidget {
   const w: PlacedWidget = {
     id: uuidv4(),
