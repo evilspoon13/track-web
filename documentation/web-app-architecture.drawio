@@ -1,0 +1,275 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="uKVukcnOgO8zwZS4xEeu">
+    <mxGraphModel dx="2066" dy="1079" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#000000;" value="TRACK Web System Architecture" vertex="1">
+          <mxGeometry height="30" width="640" x="30" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontStyle=0;fontColor=#000000;" value="Multi-tenant configurator, versioned config sync, and realtime fan-out over Firestore" vertex="1">
+          <mxGeometry height="18" width="820" x="30" y="56" as="geometry" />
+        </mxCell>
+        <mxCell id="beBoundary" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;strokeWidth=2;fillColor=#FFFFFF;fontSize=18;fontStyle=1;verticalAlign=top;align=left;spacingTop=14;spacingLeft=14;" value="Web-App Backend" vertex="1">
+          <mxGeometry height="650" width="720" x="560" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="bridge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;PI Cloud Bridge&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;one per car — telemetry, config sync, log   upload&lt;/font&gt;" vertex="1">
+          <mxGeometry height="68" width="230" x="80" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="userA" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;User A&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;Editor · Telemetry · Logs · Device&lt;/font&gt;" vertex="1">
+          <mxGeometry height="62" width="230" x="80" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="userA2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;User A · second tab&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;cross-tab sync&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="230" x="80" y="462" as="geometry" />
+        </mxCell>
+        <mxCell id="userB" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;User B · teammate&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;same device, different uid&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="230" x="80" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="userC" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;User C · other team&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;isolated device scope&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="230" x="80" y="624" as="geometry" />
+        </mxCell>
+        <mxCell id="wsGw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;strokeWidth=2;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;&lt;b&gt;WebSocket Gateway&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;/ws/pi  ·  /ws/client&lt;/font&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66" width="260" x="600" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="restApi" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;&lt;b&gt;REST API&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;screens · dbc · prefs · logs · device&lt;/font&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66" width="260" x="600" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="authMw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(31, 31, 31));&quot;&gt;&lt;b style=&quot;&quot;&gt;Auth Middleware&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;Firebase token · device secret&lt;/font&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66" width="260" x="960" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="syncSvc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(10, 10, 10));&quot;&gt;&lt;b&gt;Versioned Sync Service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;reconciles Pi ↔ cloud revisions&lt;/font&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66" width="260" x="960" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="fanout" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;strokeWidth=2;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(23, 23, 23));&quot;&gt;&lt;b&gt;Realtime Fan-Out&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;scoped per user / per device&lt;/font&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66" width="260" x="960" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="logIngest" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;&lt;b&gt;Log Ingest&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;chunked writes from Pi sessions&lt;/font&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66" width="260" x="960" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="firestore" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;Firestore (NoSQL)&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;users · devices · screens · dbc&lt;br/&gt;prefs ·   versioned files · logs&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="170" x="1340" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="fbAuth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;Firebase Auth&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;Google provider · ID tokens&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="170" x="1340" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="e_bridge_ws" edge="1" parent="1" source="bridge" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWid   th=2;fontSize=11;startArrow=block;startFill=1;endArrow=block;endFill=1;" target="wsGw" value="WSS · telemetry + sync + logs">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="530" y="190" />
+              <mxPoint x="530" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uA2_ws" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;startArrow=block;startFill=1;endArrow=block;endFill=1;shape=link;exitX=1.001;exitY=0.337;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="wsGw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="500" y="490" />
+              <mxPoint x="500" y="213" />
+            </Array>
+            <mxPoint x="500" y="410" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uB_ws" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;startArrow=block;startFill=1;endArrow=block;endFill=1;shape=link;exitX=1.004;exitY=0.583;exitDx=0;exitDy=0;exitPerimeter=0;" target="wsGw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="561" />
+              <mxPoint x="520" y="213" />
+            </Array>
+            <mxPoint x="470" y="561" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uC_ws" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;startArrow=block;startFill=1;endArrow=block;endFill=1;shape=link;exitX=1;exitY=0.854;exitDx=0;exitDy=0;exitPerimeter=0;" target="wsGw">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="540" y="640" />
+              <mxPoint x="540" y="213" />
+            </Array>
+            <mxPoint x="470" y="640" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uA_rest" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;exitX=1.002;exitY=0.131;exitDx=0;exitDy=0;exitPerimeter=0;" target="restApi" value="REST (Bearer)">
+          <mxGeometry relative="1" x="0.0942" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="730" y="430" />
+            </Array>
+            <mxPoint x="470" y="430" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uB_rest" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;endArrow=block;endFill=1;exitX=1.005;exitY=0.648;exitDx=0;exitDy=0;exitPerimeter=0;" target="restApi">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="730" y="580" />
+            </Array>
+            <mxPoint x="480" y="580" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uC_rest" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;endArrow=block;endFill=1;exitX=0.998;exitY=0.926;exitDx=0;exitDy=0;exitPerimeter=0;" target="restApi">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="661" />
+              <mxPoint x="730" y="660" />
+            </Array>
+            <mxPoint x="470" y="620" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rest_auth" edge="1" parent="1" source="restApi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;dashed=1;endArrow=block;endFill=1;" target="authMw" value="verify uid">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="580" />
+              <mxPoint x="820" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ws_auth" edge="1" parent="1" source="wsGw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;dashed=1;endArrow=block;endFill=1;" target="authMw" value="verify session">
+          <mxGeometry relative="1" x="0.519" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="880" y="230" />
+              <mxPoint x="880" y="670" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rest_sync" edge="1" parent="1" source="restApi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="syncSvc" value="commit&amp;nbsp;&lt;div&gt;revision&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.4167" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="930" y="340" />
+              <mxPoint x="930" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ws_sync" edge="1" parent="1" source="wsGw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;s   tartArrow=block;startFill=1;endArrow=block;endFill=1;" target="syncSvc" value="sync protocol">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="730" y="160" />
+              <mxPoint x="1090" y="160" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rest_fan" edge="1" parent="1" source="restApi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="fanout" value="broadcast event">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="840" y="420" />
+              <mxPoint x="1090" y="420" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ws_fan" edge="1" parent="1" source="wsGw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11   ;startArrow=block;startFill=1;endArrow=block;endFill=1;" target="fanout" value="telemetry frames">
+          <mxGeometry relative="1" x="0.3605" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="730" y="270" />
+              <mxPoint x="1090" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ws_log" edge="1" parent="1" source="wsGw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="logIngest" value="log_upload">
+          <mxGeometry relative="1" x="0.2" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="890" y="220" />
+              <mxPoint x="890" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sync_fs" edge="1" parent="1" source="syncSvc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=1   1;startArrow=block;startFill=1;endArrow=block;endFill=1;" target="firestore" value="versioned writes">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1380" y="213" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_fan_fs" edge="1" parent="1" source="fanout" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize   =11;startArrow=block;startFill=1;endArrow=block;endFill=1;" target="firestore" value="user /&amp;nbsp;&lt;div&gt;device scope&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.0246" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1310" y="353" />
+              <mxPoint x="1310" y="353" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_log_fs" edge="1" parent="1" source="logIngest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="firestore" value="log chunks">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1380" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_auth_fb" edge="1" parent="1" source="authMw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;dashed=1;endArrow=block;endFill=1;" target="fbAuth" value="verify token">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1420" y="683" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uA_fb" edge="1" parent="1" source="userA" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;dashed=1;endArrow=block;endFill=1;" target="fbAuth" value="sign in">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="40" y="411" />
+              <mxPoint x="40" y="820" />
+              <mxPoint x="1435" y="820" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;font style=&quot;&quot;&gt;&lt;b&gt;Screen Editor&lt;/b&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="80" x="370" y="404" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-9" parent="1" style="swimlane;startSize=0;" value="" vertex="1">
+          <mxGeometry height="290" width="100" x="360" y="392" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-4" parent="0BQkNg0O6NPzLPVFiXBm-9" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;font style=&quot;&quot;&gt;&lt;b&gt;Live Telemetry&lt;/b&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="80" x="10" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-5" parent="0BQkNg0O6NPzLPVFiXBm-9" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;Log Terminal&lt;/b&gt;&lt;span style=&quot;color: rgba(0, 0, 0, 0); font-family: monospace; font-size: 0px; text-align: start; text-wrap-mode: nowrap;&quot;&gt;%3CmxGraphModel%3E%3Croot%3E%3CmxCell%20id%3D%220%22%2F%3E%3CmxCell%20id%3D%221%22%20parent%3D%220%22%2F%3E%3CmxCell%20id%3D%222%22%20parent%3D%221%22%20style%3D%22rounded%3D1%3BwhiteSpace%3Dwrap%3Bhtml%3D1%3BstrokeColor%3D%23000000%3BfillColor%3D%23FFFFFF%3BfontSize%3D13%3BfontStyle%3D0%3B%22%20value%3D%22%26lt%3Bfont%20style%3D%26quot%3B%26quot%3B%26gt%3B%26lt%3Bb%26gt%3BLive%20Telemetry%26lt%3B%2Fb%26gt%3B%26lt%3B%2Ffont%26gt%3B%22%20vertex%3D%221%22%3E%3CmxGeometry%20height%3D%2258%22%20width%3D%2280%22%20x%3D%22150%22%20y%3D%22420%22%20as%3D%22geometry%22%2F%3E%3C%2FmxCell%3E%3C%2Froot%3E%3C%2FmxGraphModel%3E&lt;/span&gt;" vertex="1">
+          <mxGeometry height="58" width="80" x="10" y="148" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-6" parent="0BQkNg0O6NPzLPVFiXBm-9" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#FFFFFF;fontSize=13;fontStyle=0;" value="&lt;b&gt;Device&lt;/b&gt;" vertex="1">
+          <mxGeometry height="58" width="80" x="10" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-15" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;&lt;font style=&quot;font-size: 18px;&quot;&gt;Web-App Frontend&lt;/font&gt;&lt;/b&gt;" vertex="1">
+          <mxGeometry height="20" width="180" x="220" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-23" edge="1" parent="1" source="userA" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.021;entryY=0.067;entryDx=0;entryDy=0;entryPerimeter=0;" target="0BQkNg0O6NPzLPVFiXBm-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-24" edge="1" parent="1" source="userA2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.003;entryY=0.34;entryDx=0;entryDy=0;entryPerimeter=0;" target="0BQkNg0O6NPzLPVFiXBm-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-25" edge="1" parent="1" source="userB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.003;entryY=0.611;entryDx=0;entryDy=0;entryPerimeter=0;" target="0BQkNg0O6NPzLPVFiXBm-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-26" edge="1" parent="1" source="userC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.028;entryY=0.902;entryDx=0;entryDy=0;entryPerimeter=0;" target="0BQkNg0O6NPzLPVFiXBm-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-31" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="userB" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="40" y="569" as="sourcePoint" />
+            <mxPoint x="280" y="520" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-32" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="40" y="490.83" as="sourcePoint" />
+            <mxPoint x="80" y="490.83" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="0BQkNg0O6NPzLPVFiXBm-33" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="40" y="652.83" as="sourcePoint" />
+            <mxPoint x="80" y="652.83" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_uA_ws" edge="1" parent="1" source="0BQkNg0O6NPzLPVFiXBm-9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;st   artArrow=block;startFill=1;endArrow=block;endFill=1;shape=link;exitX=1.001;exitY=0.065;exitDx=0;exitDy=0;exitPerimeter=0;" target="wsGw" value="WSS /ws/client">
+          <mxGeometry relative="1" x="-0.1072" y="-40" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="480" y="411" />
+              <mxPoint x="480" y="213" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
