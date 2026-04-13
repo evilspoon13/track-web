@@ -291,14 +291,10 @@ export default function ConfigPanel() {
                       <div>
                         <label className="mb-1 block text-xs text-gray-500">X Frame</label>
                         <AnimatedSelect
-                          value={
-                            widget.graphConfig?.x_can_id !== undefined
-                              ? "0x" + widget.graphConfig.x_can_id.toString(16)
-                              : ""
-                          }
+                          value={widget.graphConfig?.x_can_id ?? ""}
                           onChange={(v) =>
                             handleGraphConfig({
-                              x_can_id: v ? parseInt(v, 16) : undefined,
+                              x_can_id: v || undefined,
                             })
                           }
                           options={[
@@ -321,7 +317,7 @@ export default function ConfigPanel() {
                           options={[
                             { value: "", label: "None" },
                             ...(widget.graphConfig?.x_can_id !== undefined
-                              ? frameParserConfig["0x" + widget.graphConfig.x_can_id.toString(16)]?.signals ?? []
+                              ? frameParserConfig[widget.graphConfig.x_can_id]?.signals ?? []
                               : []
                             ).map((sig) => ({
                               value: sig.name,
