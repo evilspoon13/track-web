@@ -15,10 +15,9 @@ interface UploadSession {
 
 const activeSessions = new Map<string, UploadSession>();
 
-let clientSockets = new Map<string, ClientConnection>();
+let clientSockets = new Map<WebSocket, ClientConnection>();
 const piSockets = new Map<string, PiConnection>();
 const socketToPiId = new Map<WebSocket, string>();
-const socketToClientId = new Map<WebSocket, string>();
 const PI_DEADLINE_MS = 20_000;
 const PI_MONITOR_INTERVAL_MS = 5_000;
 
@@ -48,14 +47,6 @@ setInterval(() => {
 function normalizePiId(parsed: { device_id?: unknown }): string | null {
   if (typeof parsed.device_id === "string" && parsed.device_id.trim().length > 0) {
     return parsed.device_id;
-  }
-
-  return null;
-}
-
-function normalizeClientId(parsed: { client_id?: unknown }): string | null {
-  if (typeof parsed.client_id === "string" && parsed.client_id.trim().length > 0) {
-    return parsed.client_id;
   }
 
   return null;
@@ -103,45 +94,18 @@ function registerPiById(piId: string, socket: WebSocket): PiConnection {
   return connection;
 }
 
-function registerClientById(clientId: string, socket: WebSocket): ClientConnection {
-  const existingForSocket = socketToClientId.get(socket);
-  if (existingForSocket && existingForSocket !== clientId) {
-    const previousConnection = clientSockets.get(existingForSocket);
-    if (previousConnection?.socket === socket) {
-      clientSockets.delete(existingForSocket);
-    }
-  }
-
-  const existing = clientSockets.get(clientId);
+function registerClientSocket(socket: WebSocket): ClientConnection {
+  const existing = clientSockets.get(socket);
   if (existing) {
-    if (existing.socket !== socket) {
-      const oldSocket = existing.socket;
-      if (socketToClientId.get(oldSocket) === clientId) {
-        socketToClientId.delete(oldSocket);
-      }
-      try {
-        oldSocket.close(1000, "Client web socket replaced");
-      } catch {
-        // ignore close failures
-      }
-    }
-
-    existing.connectedAt = Date.now();
     existing.lastHeartbeat = Date.now();
-    existing.socket = socket;
-    socketToClientId.set(socket, clientId);
-    clientSockets.set(clientId, existing);
     return existing;
   }
-
   const connection: ClientConnection = {
     socket,
     connectedAt: Date.now(),
     lastHeartbeat: Date.now(),
   };
-
-  clientSockets.set(clientId, connection);
-  socketToClientId.set(socket, clientId);
+  clientSockets.set(socket, connection);
   return connection;
 }
 
@@ -210,27 +174,8 @@ export function disconnectPi(piId: string, socket?: WebSocket) {
   markDeviceDisconnected(piId).catch(console.error);
 }
 
-export function disconnectClient(id: string, socket?: WebSocket) {
-  const connection = clientSockets.get(id);
-  if (!connection) {
-    if (socket && socketToClientId.get(socket) === id) {
-      socketToClientId.delete(socket);
-    }
-    return;
-  }
-
-  if (socket && connection.socket !== socket) {
-    if (socketToClientId.get(socket) === id) {
-      socketToClientId.delete(socket);
-    }
-    return;
-  }
-
-  if (socketToClientId.get(connection.socket) === id) {
-    socketToClientId.delete(connection.socket);
-  }
-
-  clientSockets.delete(id);
+export function disconnectClient(socket: WebSocket) {
+  clientSockets.delete(socket);
 }
 
 export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId?: string): string | undefined {
@@ -451,7 +396,7 @@ export async function handleClientMessage(
             : undefined;
 
           const deviceId = await resolveDeviceIdForUid(uid, emailHint);
-          const connection = registerClientById(uid, socket);
+          const connection = registerClientSocket(socket);
           connection.uid = uid;
           if (deviceId) {
             connection.deviceId = deviceId;
@@ -469,36 +414,8 @@ export async function handleClientMessage(
         }
       }
 
-      const nextClientId = normalizeClientId(obj);
-      if (nextClientId) {
-        const connection = clientSockets.get(nextClientId);
-        if (!connection || connection.socket !== socket) {
-          registerClientById(nextClientId, socket);
-        } else {
-          connection.lastHeartbeat = Date.now();
-        }
-
-        activeClientId = nextClientId;
-      } else if (registeredClientId) {
-        const connection = clientSockets.get(registeredClientId);
-        if (connection && connection.socket === socket) {
-          connection.lastHeartbeat = Date.now();
-        }
-      }
-
-      if (obj.type === "auth" && typeof obj.token === "string" && activeClientId) {
-        try {
-          const decoded = await adminAuth.verifyIdToken(obj.token);
-          const userSnap = await db.collection("users").doc(decoded.uid).get();
-          const deviceId = userSnap.exists ? (userSnap.data()?.device_id as string | undefined) : undefined;
-          if (deviceId) {
-            const conn = clientSockets.get(activeClientId);
-            if (conn?.socket === socket) conn.deviceId = deviceId;
-          }
-        } catch {
-          // invalid token — deviceId stays unset, no telemetry delivered
-        }
-      }
+      const existing = clientSockets.get(socket);
+      if (existing) existing.lastHeartbeat = Date.now();
     }
   } catch {
     // ignore malformed non-JSON packets

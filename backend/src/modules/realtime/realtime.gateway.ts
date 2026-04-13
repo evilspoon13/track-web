@@ -42,9 +42,7 @@ export function createRealtimeGateway(server: HttpServer): void {
 
       socket.on("close", () => {
         logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
-        if (activeClientId) {
-          RealtimeService.disconnectClient(activeClientId, socket);
-        }
+        RealtimeService.disconnectClient(socket);
       });
     }
     else {
