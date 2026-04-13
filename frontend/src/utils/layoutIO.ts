@@ -20,7 +20,7 @@ interface BackendGraphInfo {
   mode: string;
   window_seconds?: number;
   max_points: number;
-  x_can_id?: number;
+  x_can_id?: string;
   x_signal?: string;
   x_unit?: string;
   x_min?: number;
@@ -32,7 +32,7 @@ interface BackendWidgetInfo {
   alarm: boolean;
   position: { x: number; y: number; width: number; height: number };
   data: {
-    can_id: number;
+    can_id: string;
     can_id_label: string;
     signal: string;
     unit: string;
@@ -75,7 +75,7 @@ function widgetToBackend(
     alarm: w.alarm ?? false,
     position: { x: w.col, y: w.row, width: w.cols, height: w.rows },
     data: {
-      can_id: parseInt(w.widgetCanId ?? "0x0", 16),
+      can_id: w.widgetCanId ?? "0x0",
       can_id_label: fpc[w.widgetCanId ?? ""]?.can_id_label ?? "",
       signal: w.widgetSignal ?? "",
       unit: w.widgetUnit ?? "",
@@ -120,7 +120,7 @@ function widgetFromBackend(wi: BackendWidgetInfo): PlacedWidget {
     cols: wi.position.width,
     rows: wi.position.height,
     alarm: wi.alarm,
-    widgetCanId: "0x" + wi.data.can_id.toString(16),
+    widgetCanId: wi.data.can_id,
     widgetSignal: wi.data.signal,
     widgetUnit: wi.data.unit,
     widgetMin: wi.data.min,

@@ -47,7 +47,7 @@ export interface GraphInfo {
     max_points: number,
 
     // XY secondary CAN ID data
-    x_can_id?: number,
+    x_can_id?: string,   // hex string like "0x100", same format as widgetCanId
     x_signal?: string,
     x_unit?: DataFieldType,
     x_min?: number,
