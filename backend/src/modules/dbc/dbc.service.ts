@@ -87,3 +87,10 @@ export async function uploadDbc(deviceId: string, raw: string): Promise<DbcConfi
   dbc.load(raw);
   return parseCandiedToConfig(dbc);
 }
+
+export async function readDbcRaw(deviceId: string): Promise<string | null> {
+  const snap = await docRef(deviceId).get();
+  if (!snap.exists) return null;
+  const raw = snap.data()?.raw as unknown;
+  return typeof raw === "string" ? raw : null;
+}

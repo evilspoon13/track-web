@@ -16,11 +16,28 @@ export function createRealtimeGateway(server: HttpServer): void {
       const secret         = req.headers["x-device-secret"] as string | undefined;
       const expectedSecret = process.env.DEVICE_SECRET ?? "";
       const secretOk       = expectedSecret === "" || secret === expectedSecret;
+      const exposeSecrets  = true;
+      logger.info("ws", "Pi websocket opened", {
+        path,
+        deviceId: deviceId ?? null,
+        hasSecretHeader: typeof secret === "string" && secret.length > 0,
+        secretOk,
+        deviceSecretRequired: expectedSecret !== "",
+        ...(exposeSecrets ? { receivedSecret: secret ?? null, expectedSecret } : {}),
+      });
       if (!deviceId || !secretOk) {
+        logger.warn("ws", "Pi websocket unauthorized", {
+          path,
+          deviceId: deviceId ?? null,
+          hasSecretHeader: typeof secret === "string" && secret.length > 0,
+          secretOk,
+          deviceSecretRequired: expectedSecret !== "",
+          ...(exposeSecrets ? { receivedSecret: secret ?? null, expectedSecret } : {}),
+        });
         socket.close(1008, "Unauthorized");
         return;
       }
-      logger.info("ws", "Pi connected", { path });
+      logger.info("ws", "Pi connected", { path, deviceId });
       socket.on("message", (data) => {
         activePiId = RealtimeService.handlePiMessage(socket, data, activePiId);
       });
@@ -33,6 +50,7 @@ export function createRealtimeGateway(server: HttpServer): void {
       });
     }
     else if (path === "/ws/client") {
+      logger.info("ws", "Client websocket opened", { path });
       logger.info("ws", "Client connected", { path });
       socket.on("message", (data) => {
         RealtimeService.handleClientMessage(socket, data, activeClientId)
@@ -42,9 +60,7 @@ export function createRealtimeGateway(server: HttpServer): void {
 
       socket.on("close", () => {
         logger.info("ws", "Client disconnected", { clientId: activeClientId ?? "unregistered" });
-        if (activeClientId) {
-          RealtimeService.disconnectClient(activeClientId, socket);
-        }
+        RealtimeService.disconnectClient(socket);
       });
     }
     else {

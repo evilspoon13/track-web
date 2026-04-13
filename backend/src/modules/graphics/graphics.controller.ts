@@ -1,11 +1,14 @@
 import type { Request, Response } from "express";
 import type { ScreenInfo } from "./graphics.types";
 import * as graphicsService from "./graphics.service";
-import { sendConfigToPi } from "../realtime/realtime.service";
+import { normalizeConfigForPi, sendSyncDownloadToPi, broadcastToDeviceClients } from "../realtime/realtime.service";
+import * as SyncService from "../sync/sync.service";
 
 async function pushFullConfigToPi(deviceId: string) {
   const allScreens = await graphicsService.getAllScreens(deviceId);
-  sendConfigToPi(deviceId, { screens: allScreens });
+  const payload = normalizeConfigForPi({ screens: allScreens });
+  const state = await SyncService.commitCloudGeneratedGraphics(deviceId, payload);
+  sendSyncDownloadToPi(deviceId, SyncService.buildDownloadMessage(state));
 }
 
 export async function getScreenNames(req: Request, res: Response) {
@@ -47,6 +50,8 @@ export async function deleteScreenById(req: Request<{ screenId: string }>, res: 
       res.status(404).json({ success: false });
       return;
     }
+    broadcastToDeviceClients(req.deviceId!, { type: "screen_deleted", name: screenName });
+    await pushFullConfigToPi(req.deviceId!);
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ msg: error });
@@ -62,6 +67,7 @@ export async function updateScreen(req: Request<{ screenId: string }>, res: Resp
     const screenId = req.params.screenId;
     const screen = req.body as ScreenInfo;
     await graphicsService.saveScreen(req.deviceId, screenId, screen);
+    broadcastToDeviceClients(req.deviceId, { type: "screen_updated", name: screen.name, screen });
     await pushFullConfigToPi(req.deviceId);
     res.status(200).json({ success: true });
   } catch (error) {

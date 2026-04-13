@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { useEditorState, useEditorDispatch } from "../state/EditorContext";
 import { allowedSizes } from "../utils/widgetDefaults";
 import { hasCollision } from "../utils/gridHelpers";
@@ -56,15 +57,15 @@ export default function ConfigPanel() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         {/* CAN ID Configurator */}
-        <div className="border-b border-gray-600">
+        <div>
           <CanIdConfigurator />
         </div>
 
         {/* Widget Settings */}
         <div className="flex flex-col px-4 py-3">
-          <h3 className="mb-3 border-b border-gray-700 pb-2 text-sm font-semibold text-gray-200">
+          <label className="mb-2 block text-xs font-medium text-gray-400">
             Widget Settings
-          </h3>
+          </label>
 
           {!widget ? (
             <p className="text-xs text-gray-500">Click a widget to configure</p>
@@ -73,7 +74,7 @@ export default function ConfigPanel() {
             {/* CAN Frame + Signal side by side */}
             <div className="mb-3 grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Frame</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Frame</label>
                 <AnimatedSelect
                   value={widget.widgetCanId ?? ""}
                   onChange={(v) =>
@@ -92,7 +93,7 @@ export default function ConfigPanel() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Signal</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Signal</label>
                 <AnimatedSelect
                   value={widget.widgetSignal ?? ""}
                   onChange={(v) =>
@@ -113,7 +114,7 @@ export default function ConfigPanel() {
             {/* Unit + [Size + Alarm] on same row, Unit aligns with Min */}
             <div className="mb-3 grid grid-cols-2 items-start gap-2">
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Unit</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Unit</label>
                 <input
                   type="text"
                   value={widget.widgetUnit ?? ""}
@@ -128,7 +129,7 @@ export default function ConfigPanel() {
               </div>
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
-                  <label className="mb-1 block text-xs text-gray-500">Size</label>
+                  <label className="mb-1 block text-xs font-medium text-gray-400">Size</label>
                   <AnimatedSelect
                     value={`${widget.cols}x${widget.rows}`}
                     onChange={(v) => {
@@ -169,7 +170,7 @@ export default function ConfigPanel() {
             {/* Min / Max */}
             <div className="mb-3 grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Min</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Min</label>
                 <input
                   type="number"
                   value={widget.widgetMin ?? ""}
@@ -183,7 +184,7 @@ export default function ConfigPanel() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Max</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Max</label>
                 <input
                   type="number"
                   value={widget.widgetMax ?? ""}
@@ -201,7 +202,7 @@ export default function ConfigPanel() {
             {/* Caution / Critical */}
             <div className="mb-4 grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Caution</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Caution</label>
                 <input
                   type="number"
                   value={widget.widgetCautionThreshold ?? ""}
@@ -217,7 +218,7 @@ export default function ConfigPanel() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Critical</label>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Critical</label>
                 <input
                   type="number"
                   value={widget.widgetCriticalThreshold ?? ""}
@@ -243,7 +244,7 @@ export default function ConfigPanel() {
 
                 {/* Mode */}
                 <div className="mb-2">
-                  <label className="mb-1 block text-xs text-gray-500">Mode</label>
+                  <label className="mb-1 block text-xs font-medium text-gray-400">Mode</label>
                   <AnimatedSelect
                     value={widget.graphConfig?.mode ?? "time_series"}
                     onChange={(v) =>
@@ -258,7 +259,7 @@ export default function ConfigPanel() {
 
                 {/* Max Points */}
                 <div className="mb-2">
-                  <label className="mb-1 block text-xs text-gray-500">Max Points</label>
+                  <label className="mb-1 block text-xs font-medium text-gray-400">Max Points</label>
                   <input
                     type="number"
                     value={widget.graphConfig?.max_points ?? 1000}
@@ -272,7 +273,7 @@ export default function ConfigPanel() {
                 {/* Time Series: window */}
                 {(widget.graphConfig?.mode ?? "time_series") === "time_series" && (
                   <div className="mb-2">
-                    <label className="mb-1 block text-xs text-gray-500">Window (s)</label>
+                    <label className="mb-1 block text-xs font-medium text-gray-400">Window (s)</label>
                     <input
                       type="number"
                       value={widget.graphConfig?.window_seconds ?? 30}
@@ -289,7 +290,7 @@ export default function ConfigPanel() {
                   <>
                     <div className="mb-2 grid grid-cols-2 gap-2">
                       <div>
-                        <label className="mb-1 block text-xs text-gray-500">X Frame</label>
+                        <label className="mb-1 block text-xs font-medium text-gray-400">X Frame</label>
                         <AnimatedSelect
                           value={widget.graphConfig?.x_can_id ?? ""}
                           onChange={(v) =>
@@ -307,7 +308,7 @@ export default function ConfigPanel() {
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs text-gray-500">X Signal</label>
+                        <label className="mb-1 block text-xs font-medium text-gray-400">X Signal</label>
                         <AnimatedSelect
                           value={widget.graphConfig?.x_signal ?? ""}
                           onChange={(v) =>
@@ -328,7 +329,7 @@ export default function ConfigPanel() {
                       </div>
                     </div>
                     <div className="mb-2">
-                      <label className="mb-1 block text-xs text-gray-500">X Unit</label>
+                      <label className="mb-1 block text-xs font-medium text-gray-400">X Unit</label>
                       <input
                         type="text"
                         value={widget.graphConfig?.x_unit ?? ""}
@@ -341,7 +342,7 @@ export default function ConfigPanel() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="mb-1 block text-xs text-gray-500">X Min</label>
+                        <label className="mb-1 block text-xs font-medium text-gray-400">X Min</label>
                         <input
                           type="number"
                           value={widget.graphConfig?.x_min ?? ""}
@@ -353,7 +354,7 @@ export default function ConfigPanel() {
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs text-gray-500">X Max</label>
+                        <label className="mb-1 block text-xs font-medium text-gray-400">X Max</label>
                         <input
                           type="number"
                           value={widget.graphConfig?.x_max ?? ""}
@@ -382,8 +383,9 @@ export default function ConfigPanel() {
             onClick={() =>
               dispatch({ type: "REMOVE_WIDGET", payload: { id: widget.id } })
             }
-            className="w-full rounded border border-red-900 py-1.5 text-xs text-red-400 hover:border-red-700 hover:text-red-300"
+            className="flex w-full items-center justify-center gap-1.5 rounded border border-red-900 py-1.5 text-xs text-red-400 hover:border-red-700 hover:text-red-300"
           >
+            <Trash2 className="h-3.5 w-3.5" />
             Delete Widget
           </button>
         </div>

@@ -4,6 +4,10 @@ import { persistLogBuffer } from "../logs/logs.service";
 import { registerDeviceHeartbeat, markDeviceDisconnected } from "../devices/devices.service";
 import { logger } from "../../common/logger";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
+import * as SyncService from "../sync/sync.service";
+import * as graphicsService from "../graphics/graphics.service";
+import * as dbcService from "../dbc/dbc.service";
+import { Dbc } from "candied";
 
 interface UploadSession {
   deviceId: string;
@@ -15,10 +19,9 @@ interface UploadSession {
 
 const activeSessions = new Map<string, UploadSession>();
 
-let clientSockets = new Map<string, ClientConnection>();
+let clientSockets = new Map<WebSocket, ClientConnection>();
 const piSockets = new Map<string, PiConnection>();
 const socketToPiId = new Map<WebSocket, string>();
-const socketToClientId = new Map<WebSocket, string>();
 const PI_DEADLINE_MS = 20_000;
 const PI_MONITOR_INTERVAL_MS = 5_000;
 
@@ -48,14 +51,6 @@ setInterval(() => {
 function normalizePiId(parsed: { device_id?: unknown }): string | null {
   if (typeof parsed.device_id === "string" && parsed.device_id.trim().length > 0) {
     return parsed.device_id;
-  }
-
-  return null;
-}
-
-function normalizeClientId(parsed: { client_id?: unknown }): string | null {
-  if (typeof parsed.client_id === "string" && parsed.client_id.trim().length > 0) {
-    return parsed.client_id;
   }
 
   return null;
@@ -103,45 +98,18 @@ function registerPiById(piId: string, socket: WebSocket): PiConnection {
   return connection;
 }
 
-function registerClientById(clientId: string, socket: WebSocket): ClientConnection {
-  const existingForSocket = socketToClientId.get(socket);
-  if (existingForSocket && existingForSocket !== clientId) {
-    const previousConnection = clientSockets.get(existingForSocket);
-    if (previousConnection?.socket === socket) {
-      clientSockets.delete(existingForSocket);
-    }
-  }
-
-  const existing = clientSockets.get(clientId);
+function registerClientSocket(socket: WebSocket): ClientConnection {
+  const existing = clientSockets.get(socket);
   if (existing) {
-    if (existing.socket !== socket) {
-      const oldSocket = existing.socket;
-      if (socketToClientId.get(oldSocket) === clientId) {
-        socketToClientId.delete(oldSocket);
-      }
-      try {
-        oldSocket.close(1000, "Client web socket replaced");
-      } catch {
-        // ignore close failures
-      }
-    }
-
-    existing.connectedAt = Date.now();
     existing.lastHeartbeat = Date.now();
-    existing.socket = socket;
-    socketToClientId.set(socket, clientId);
-    clientSockets.set(clientId, existing);
     return existing;
   }
-
   const connection: ClientConnection = {
     socket,
     connectedAt: Date.now(),
     lastHeartbeat: Date.now(),
   };
-
-  clientSockets.set(clientId, connection);
-  socketToClientId.set(socket, clientId);
+  clientSockets.set(socket, connection);
   return connection;
 }
 
@@ -210,27 +178,8 @@ export function disconnectPi(piId: string, socket?: WebSocket) {
   markDeviceDisconnected(piId).catch(console.error);
 }
 
-export function disconnectClient(id: string, socket?: WebSocket) {
-  const connection = clientSockets.get(id);
-  if (!connection) {
-    if (socket && socketToClientId.get(socket) === id) {
-      socketToClientId.delete(socket);
-    }
-    return;
-  }
-
-  if (socket && connection.socket !== socket) {
-    if (socketToClientId.get(socket) === id) {
-      socketToClientId.delete(socket);
-    }
-    return;
-  }
-
-  if (socketToClientId.get(connection.socket) === id) {
-    socketToClientId.delete(connection.socket);
-  }
-
-  clientSockets.delete(id);
+export function disconnectClient(socket: WebSocket) {
+  clientSockets.delete(socket);
 }
 
 export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId?: string): string | undefined {
@@ -250,6 +199,12 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         chunk_index?: unknown;
         data?: unknown;
         total_chunks?: unknown;
+        file_id?: unknown;
+        base_version_id?: unknown;
+        change_id?: unknown;
+        content_b64?: unknown;
+        protocol?: unknown;
+        files?: unknown;
       };
       if (obj.type === "telemetry" || obj.type === "heartbeat") {
         logger.debug("ws", `Pi message: ${obj.type}`, { device_id: obj.device_id });
@@ -274,6 +229,42 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
           if (connection && connection.socket === socket) {
             connection.lastHeartbeat = Date.now();
           }
+        }
+      } else if (obj.type === "sync_state") {
+        logger.info("sync", "Pi sync_state received", { device_id: obj.device_id });
+        const nextPiId = normalizePiId(obj);
+        if (nextPiId) {
+          const connection = piSockets.get(nextPiId);
+          if (!connection || connection.socket !== socket) {
+            registerPiById(nextPiId, socket);
+          } else {
+            connection.lastHeartbeat = Date.now();
+          }
+          activePiId = nextPiId;
+          registerDeviceHeartbeat(nextPiId).catch(console.error);
+        }
+
+        if (activePiId) {
+          const hello = obj as SyncService.SyncStateMessage;
+          void SyncService.planForState(activePiId, hello, SyncService.GRAPHICS_FILE_ID)
+            .then((plan) => {
+              logger.info("sync", "Sending sync_plan", { deviceId: activePiId, fileId: SyncService.GRAPHICS_FILE_ID, action: plan.action });
+              const envelope = { device_id: activePiId, ...plan };
+              socket.send(JSON.stringify(envelope));
+            })
+            .catch((error) => {
+              logger.warn("sync", "Failed to plan sync_state", { deviceId: activePiId, fileId: SyncService.GRAPHICS_FILE_ID, error: String(error) });
+            });
+
+          void SyncService.planForState(activePiId, hello, SyncService.DISPLAY_DBC_FILE_ID)
+            .then((plan) => {
+              logger.info("sync", "Sending sync_plan", { deviceId: activePiId, fileId: SyncService.DISPLAY_DBC_FILE_ID, action: plan.action });
+              const envelope = { device_id: activePiId, ...plan };
+              socket.send(JSON.stringify(envelope));
+            })
+            .catch((error) => {
+              logger.warn("sync", "Failed to plan sync_state", { deviceId: activePiId, fileId: SyncService.DISPLAY_DBC_FILE_ID, error: String(error) });
+            });
         }
       } else if (obj.type === "telemetry") {
         if (!activePiId) {
@@ -301,6 +292,117 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         }
 
         return activePiId;
+      } else if (obj.type === "sync_upload") {
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        if (!deviceId) return activePiId;
+        if (!activePiId) {
+          registerPiById(deviceId, socket);
+          activePiId = deviceId;
+        }
+
+        const fileId = typeof obj.file_id === "string" ? obj.file_id : "";
+        const baseRev = typeof obj.base_version_id === "number" ? obj.base_version_id : NaN;
+        const changeId = typeof obj.change_id === "string" ? obj.change_id : "";
+        const contentB64 = typeof obj.content_b64 === "string" ? obj.content_b64 : "";
+
+        const allowed = fileId === SyncService.GRAPHICS_FILE_ID || fileId === SyncService.DISPLAY_DBC_FILE_ID;
+        if (!allowed) return activePiId;
+        if (!Number.isFinite(baseRev)) return activePiId;
+        if (!changeId || !contentB64) return activePiId;
+
+        const content = Buffer.from(contentB64, "base64");
+        if (content.byteLength === 0) return activePiId;
+
+        logger.info("sync", "Pi sync_upload received", {
+          deviceId,
+          fileId,
+          base_version_id: baseRev,
+          change_id: changeId,
+          content_size: content.byteLength,
+        });
+
+        // Validate payload before committing.
+        let screensFromPi: unknown[] | null = null;
+        let rawDbc: string | null = null;
+        if (fileId === SyncService.GRAPHICS_FILE_ID) {
+          try {
+            const parsedGraphics = JSON.parse(content.toString("utf8")) as { screens?: unknown };
+            if (!Array.isArray(parsedGraphics.screens)) throw new Error("Missing screens");
+            screensFromPi = parsedGraphics.screens as unknown[];
+          } catch {
+            logger.warn("sync", "Rejected Pi upload: invalid graphics json", { deviceId, change_id: changeId });
+            socket.send(JSON.stringify({
+              device_id: deviceId,
+              type: "sync_reject",
+              file_id: fileId,
+              reason: "invalid_json",
+              change_id: changeId,
+            }));
+            return activePiId;
+          }
+        } else if (fileId === SyncService.DISPLAY_DBC_FILE_ID) {
+          try {
+            rawDbc = content.toString("utf8");
+            const dbc = new Dbc();
+            dbc.load(rawDbc);
+          } catch {
+            logger.warn("sync", "Rejected Pi upload: invalid dbc", { deviceId, change_id: changeId });
+            socket.send(JSON.stringify({
+              device_id: deviceId,
+              type: "sync_reject",
+              file_id: fileId,
+              reason: "invalid_dbc",
+              change_id: changeId,
+            }));
+            return activePiId;
+          }
+        }
+
+        void SyncService.commitPiUpload(deviceId, fileId, content, changeId, baseRev)
+          .then(({ state }) => {
+            // Apply to existing stores so the web UI / logs see the Pi edit.
+            if (fileId === SyncService.GRAPHICS_FILE_ID && screensFromPi) {
+              void graphicsService.replaceAllScreensFromPi(deviceId, screensFromPi)
+                .then(() => logger.info("sync", "Applied graphics from Pi", { deviceId, change_id: changeId, version_id: state.version_id }))
+                .catch((error) => logger.warn("sync", "Failed to apply graphics from Pi", { deviceId, change_id: changeId, error: String(error) }));
+            } else if (fileId === SyncService.DISPLAY_DBC_FILE_ID && rawDbc !== null) {
+              void dbcService.uploadDbc(deviceId, rawDbc)
+                .then(() => logger.info("sync", "Applied DBC from Pi", { deviceId, change_id: changeId, version_id: state.version_id }))
+                .catch((error) => logger.warn("sync", "Failed to apply DBC from Pi", { deviceId, change_id: changeId, error: String(error) }));
+            }
+
+            socket.send(JSON.stringify({
+              device_id: deviceId,
+              type: "sync_commit",
+              file_id: fileId,
+              version_id: state.version_id,
+              modified_by: state.modified_by,
+              modified_at_ms: state.modified_at_ms,
+              change_id: state.change_id,
+            }));
+          })
+          .catch((error) => {
+            if (error instanceof SyncService.BaseRevMismatchError) {
+              logger.info("sync", "Rejected Pi upload: base_rev_mismatch", {
+                deviceId,
+                fileId,
+                change_id: changeId,
+                got_base_version_id: baseRev,
+                expected_base_version_id: error.current.version_id,
+              });
+              socket.send(JSON.stringify({
+                device_id: deviceId,
+                type: "sync_reject",
+                file_id: fileId,
+                reason: "base_rev_mismatch",
+                change_id: changeId,
+                expected_base_version_id: error.current.version_id,
+                download: SyncService.buildDownloadMessage(error.current),
+              }));
+              return;
+            }
+            logger.warn("sync", "Pi upload failed", { deviceId, fileId, error: String(error) });
+          });
       } else if (obj.type === "log_upload_start") {
         const deviceId = activePiId ?? normalizePiId(obj) ?? "";
         const filename = obj.filename as string;
@@ -356,8 +458,77 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   return activePiId;
 }
 
+function toHexCanId(n: unknown): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "0x0";
+  return "0x" + Math.floor(n).toString(16);
+}
+
+export function normalizeConfigForPi(config: unknown): unknown {
+  if (!config || typeof config !== "object") return config;
+  const c = config as { screens?: Array<{ widgets?: Array<Record<string, unknown>> }> };
+  if (!Array.isArray(c.screens)) return config;
+
+  return {
+    ...c,
+    screens: c.screens.map((s) => ({
+      ...s,
+      widgets: (s.widgets ?? []).map((w) => {
+        const data = w.data as { can_id?: unknown } | undefined;
+        const graph = w.graph as { x_can_id?: unknown } | undefined;
+        return {
+          ...w,
+          data: data ? { ...data, can_id: toHexCanId(data.can_id) } : data,
+          graph:
+            graph && typeof graph.x_can_id === "number"
+              ? { ...graph, x_can_id: toHexCanId(graph.x_can_id) }
+              : graph,
+        };
+      }),
+    })),
+  };
+}
+
 export function sendConfigToPi(deviceId: string, screenInfo: unknown): boolean {
-  return sendMessageToPi(deviceId, { type: "config_update", payload: screenInfo });
+  return sendMessageToPi(deviceId, {
+    type: "config_update",
+    payload: normalizeConfigForPi(screenInfo),
+  });
+}
+
+export function sendSyncDownloadToPi(deviceId: string, download: SyncService.SyncDownloadMessage): boolean {
+  return sendMessageToPi(deviceId, download);
+}
+
+export function broadcastToDeviceClients(deviceId: string, message: unknown): number {
+  const payload = JSON.stringify(message);
+  let sent = 0;
+  for (const conn of clientSockets.values()) {
+    if (conn.deviceId !== deviceId) continue;
+    if (conn.socket.readyState !== WebSocket.OPEN) continue;
+    try {
+      conn.socket.send(payload);
+      sent++;
+    } catch (error) {
+      logger.warn("ws", "Failed to broadcast to client", { deviceId, error: String(error) });
+    }
+  }
+  return sent;
+}
+
+export function broadcastToUserClients(uid: string, message: unknown): number {
+  const payload = JSON.stringify(message);
+  let sent = 0;
+  for (const conn of clientSockets.values()) {
+    if (conn.uid !== uid) continue;
+    if (conn.socket.readyState !== WebSocket.OPEN) continue;
+    try {
+      conn.socket.send(payload);
+      sent++;
+    } catch (error) {
+      logger.warn("ws", "Failed to broadcast to user client", { uid, error: String(error) });
+    }
+  }
+  return sent;
 }
 
 export function sendMessageToPi(deviceId: string, message: unknown): boolean {
@@ -402,7 +573,7 @@ export async function handleClientMessage(
             : undefined;
 
           const deviceId = await resolveDeviceIdForUid(uid, emailHint);
-          const connection = registerClientById(uid, socket);
+          const connection = registerClientSocket(socket);
           connection.uid = uid;
           if (deviceId) {
             connection.deviceId = deviceId;
@@ -420,36 +591,8 @@ export async function handleClientMessage(
         }
       }
 
-      const nextClientId = normalizeClientId(obj);
-      if (nextClientId) {
-        const connection = clientSockets.get(nextClientId);
-        if (!connection || connection.socket !== socket) {
-          registerClientById(nextClientId, socket);
-        } else {
-          connection.lastHeartbeat = Date.now();
-        }
-
-        activeClientId = nextClientId;
-      } else if (registeredClientId) {
-        const connection = clientSockets.get(registeredClientId);
-        if (connection && connection.socket === socket) {
-          connection.lastHeartbeat = Date.now();
-        }
-      }
-
-      if (obj.type === "auth" && typeof obj.token === "string" && activeClientId) {
-        try {
-          const decoded = await adminAuth.verifyIdToken(obj.token);
-          const userSnap = await db.collection("users").doc(decoded.uid).get();
-          const deviceId = userSnap.exists ? (userSnap.data()?.device_id as string | undefined) : undefined;
-          if (deviceId) {
-            const conn = clientSockets.get(activeClientId);
-            if (conn?.socket === socket) conn.deviceId = deviceId;
-          }
-        } catch {
-          // invalid token — deviceId stays unset, no telemetry delivered
-        }
-      }
+      const existing = clientSockets.get(socket);
+      if (existing) existing.lastHeartbeat = Date.now();
     }
   } catch {
     // ignore malformed non-JSON packets

@@ -80,7 +80,7 @@ function GraphCard({
   return (
     <div className="bg-gray-950 rounded-xl p-4 flex flex-col gap-3 w-full h-full">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500 uppercase leading-tight">
+        <span className="text-[10px] tracking-[0.18em] text-gray-500 uppercase leading-tight">
           {frameLabel}
           <br />
           {signalName}
@@ -186,7 +186,7 @@ function SignalCard({
 
 export default function TelemetryPage() {
   const { frameParserConfig } = useEditorState();
-  const { signals: history, connected } = useTelemetry();
+  const { signals: history } = useTelemetry();
 
   const signalKeys = Object.keys(history);
   const n = signalKeys.length;
@@ -197,17 +197,13 @@ export default function TelemetryPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-gray-900">
-      <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-gray-800 px-6">
-        <span className="text-[10px] font-mono tracking-[0.18em] text-gray-500">LIVE TELEMETRY</span>
-        <div className="flex items-center gap-1.5">
-          <div className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-blue-400" : "bg-gray-600"}`} />
-          <span className="text-[10px] font-mono text-gray-600">{connected ? "LIVE" : "NO SIGNAL"}</span>
-        </div>
+      <div className="flex h-10 flex-shrink-0 items-center border-b border-gray-800 px-6">
+        <span className="text-[10px] tracking-[0.18em] text-gray-500">LIVE TELEMETRY</span>
       </div>
       <div className="flex-1 overflow-hidden p-3">
         {n === 0 ? (
-          <div className="flex h-full items-center justify-center text-[10px] font-mono text-gray-600">
-            waiting for telemetry...
+          <div className="flex h-full items-center justify-center text-[10px] text-gray-600">
+            Waiting for telemetry...
           </div>
         ) : (
           <div
