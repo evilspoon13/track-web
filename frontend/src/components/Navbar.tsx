@@ -170,7 +170,7 @@ export default function Navbar() {
         </div>
       )}
 
-      <div className="flex h-full w-72 flex-col border-r border-gray-700 bg-gray-800">
+      <div className="flex h-full w-80 flex-col border-r border-gray-700 bg-gray-800">
         {/* DBC Upload */}
         <div className="p-4 pb-2">
           <label className="mb-2 block text-xs font-medium text-gray-400">DBC File</label>

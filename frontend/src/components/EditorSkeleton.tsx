@@ -55,7 +55,7 @@ export default function EditorSkeleton() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex h-full w-72 flex-col border-r border-gray-700 bg-gray-800">
+        <div className="flex h-full w-80 flex-col border-r border-gray-700 bg-gray-800">
           <div className="border-b border-gray-700 p-4">
             <Shimmer className="mb-2 h-3 w-16" />
             <Shimmer className="h-8 w-full" />
