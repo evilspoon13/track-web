@@ -354,6 +354,22 @@ export function broadcastToDeviceClients(deviceId: string, message: unknown): nu
   return sent;
 }
 
+export function broadcastToUserClients(uid: string, message: unknown): number {
+  const payload = JSON.stringify(message);
+  let sent = 0;
+  for (const conn of clientSockets.values()) {
+    if (conn.uid !== uid) continue;
+    if (conn.socket.readyState !== WebSocket.OPEN) continue;
+    try {
+      conn.socket.send(payload);
+      sent++;
+    } catch (error) {
+      logger.warn("ws", "Failed to broadcast to user client", { uid, error: String(error) });
+    }
+  }
+  return sent;
+}
+
 export function sendMessageToPi(deviceId: string, message: unknown): boolean {
   const connection = piSockets.get(deviceId);
   if (!connection) return false;

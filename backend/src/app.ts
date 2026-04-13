@@ -8,6 +8,7 @@ import devicesRoutes from "./modules/devices/devices.routes";
 import graphicsRoutes from "./modules/graphics/graphics.routes";
 import dbcRoutes from "./modules/dbc/dbc.routes";
 import logsRoutes from "./modules/logs/logs.routes";
+import prefsRoutes from "./modules/prefs/prefs.routes";
 
 const app = express();
 
@@ -23,6 +24,10 @@ app.use("/api/devices", requireDeviceAuth, devicesRoutes);
 
 // user-authenticated routes (Firebase token)
 app.use("/api", requireAuth);
+
+// per-user prefs (no device requirement — user-scoped only)
+app.use("/api/prefs", prefsRoutes);
+
 app.use("/api", requireDevice);
 
 app.use("/api/graphics", graphicsRoutes);
