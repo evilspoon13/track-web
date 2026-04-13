@@ -1,12 +1,12 @@
 # Data Flow Diagrams
 
-These diagrams show how data moves through the system — state mutations, API interactions, WebSocket streams, and pagination.
+These diagrams show how data moves through the system — state mutations, API interactions, WebSocket streams, cross-tab sync, and CSV export.
 
 ---
 
 ## 1. Initial Data Load
 
-When `EditorProvider` mounts, it fetches the current CAN frame definitions and driver display setting from the backend in parallel before any user interaction.
+When `EditorProvider` mounts, it fetches the DBC, every saved screen, and the user's screen prefs in parallel. Once both screens and prefs have arrived it dispatches `CLEANUP_STALE_PREFS` to drop pinned/ordered names that no longer map to a live screen.
 
 ```mermaid
 sequenceDiagram
@@ -15,18 +15,38 @@ sequenceDiagram
     participant API as Backend API
     participant FS as Firebase Firestore
 
-    EP->>IO: Promise.all([getDbc(), getDriverDisplay()])
-    IO->>API: GET /api/dbc
-    IO->>API: GET /api/graphics/driver-display
-    API->>FS: read device config
-    FS-->>API: frames + driverDisplayScreen
-    API-->>IO: { frames: FrameParserConfig }
-    API-->>IO: { driverDisplayScreen: string | null }
-    IO-->>EP: [FrameParserConfig, string | null]
-    EP->>EP: dispatch SET_FRAME_PARSER_CONFIG
-    EP->>EP: dispatch LOAD_DRIVER_DISPLAY
-    Note over EP: EditorState updated,<br/>components re-render
+    par DBC
+        EP->>IO: getDbc()
+        IO->>API: GET /api/dbc
+        API->>FS: read devices/{deviceId}/dbc/content
+        FS-->>API: raw + parsed frames
+        API-->>IO: { frames: FrameParserConfig }
+        IO-->>EP: FrameParserConfig
+        EP->>EP: dispatch SET_FRAME_PARSER_CONFIG
+    and Screens
+        EP->>IO: listScreens()
+        IO->>API: GET /api/graphics/screens
+        API-->>IO: { screens: string[] }
+        IO-->>EP: names
+        EP->>IO: Promise.all(names.map(loadScreen))
+        IO->>API: GET /api/graphics/screens/{name} (× N)
+        API-->>IO: BackendScreenInfo (× N)
+        IO-->>EP: SavedLayout[]
+        EP->>EP: dispatch LOAD_ALL_SCREENS
+    and Prefs
+        EP->>IO: getScreenPrefs()
+        IO->>API: GET /api/prefs/screens
+        API->>FS: read users/{uid}/prefs/screens
+        FS-->>API: { pinnedNames, order }
+        API-->>IO: ScreenPrefs
+        IO-->>EP: ScreenPrefs
+        EP->>EP: dispatch SET_SCREEN_PREFS
+    end
+
+    Note over EP: Once screens + prefs both settled,<br/>dispatch CLEANUP_STALE_PREFS
 ```
+
+If `listScreens()` throws `DeviceNotRegisteredError` (HTTP 403), `AppWithAuth` routes to the "No Device Linked" screen instead of mounting `EditorProvider`.
 
 ---
 
@@ -36,10 +56,10 @@ Every user action that changes editor state follows this path. No component muta
 
 ```mermaid
 flowchart LR
-    C[Component\neg. ConfigPanel] -->|dispatch action| R[editorReducer]
-    R -->|returns new EditorState| CTX[EditorContext\nstate value updated]
+    C["Component<br/>(e.g. ConfigPanel)"] -->|dispatch action| R[editorReducer]
+    R -->|returns new EditorState| CTX["EditorContext<br/>state value updated"]
     CTX -->|re-render| C
-    CTX -->|re-render| C2[Other subscribers\neg. ScreenTabs, Navbar]
+    CTX -->|re-render| C2["Other subscribers<br/>(ScreenTabs, Navbar)"]
 ```
 
 **Action lifecycle example — editing a widget's CAN ID:**
@@ -60,15 +80,15 @@ sequenceDiagram
     R->>R: sets screen.isDirty = true
     R-->>CTX: returns new EditorState
     CTX-->>CP: ConfigPanel re-renders with new value
-    CTX-->>Navbar: Save button shows orange dot
-    CTX-->>ScreenTabs: Tab shows orange dot
+    CTX-->>Navbar: Save button shows teal dot
+    CTX-->>ScreenTabs: Tab shows teal dot
 ```
 
 ---
 
 ## 3. Save Sequence
 
-Saving pushes the current state to the backend, which persists to Firestore and relays config to the Pi over WebSocket.
+Clicking Save in `Navbar` saves **every dirty screen** in parallel, then the DBC if `canIdsDirty`. Each screen POST triggers a backend-side cross-tab broadcast and a sync-store commit destined for the Pi.
 
 ```mermaid
 sequenceDiagram
@@ -76,91 +96,120 @@ sequenceDiagram
     participant IO as layoutIO.ts
     participant API as Backend API
     participant FS as Firebase Firestore
+    participant SYNC as SyncService
+    participant WS as broadcastToDeviceClients
     participant PI as Pi (cloud-bridge)
-    participant D as dispatch
 
     NB->>NB: user confirms save modal
-    NB->>IO: saveScreen(screen, frameParserConfig)
-    IO->>IO: widgetToBackend() converts each widget<br/>(col/row → x/y, hex CAN ID → int)
-    IO->>API: POST /api/graphics/screens/{name}
-    API->>FS: write screen config
-    API->>PI: push layout via /ws/pi WebSocket
-    PI->>PI: reload graphics-engine with new config
-    API-->>IO: 200 OK
-    IO-->>NB: resolved
+    NB->>NB: targets = dirtyScreens (or [activeScreen])
 
-    alt driverDisplayDirty
-        NB->>IO: setDriverDisplay(screenName)
-        IO->>API: POST /api/graphics/driver-display
-        API->>FS: write driverDisplayScreen
-        API-->>IO: 200 OK
+    par for each dirty screen
+        NB->>IO: saveScreen(screen, fpc)
+        IO->>IO: widgetToBackend() converts widgets
+        IO->>API: POST /api/graphics/screens/{name}
+        API->>FS: write devices/{deviceId}/screens/{name}
+        API->>WS: broadcast screen_updated → other tabs
+        API->>SYNC: commitCloudGeneratedGraphics(allScreens)
+        SYNC->>PI: /ws/pi sync_download (next reconnect or live)
+        API-->>IO: { success: true }
     end
+
+    NB->>dispatch: UPDATE_ORIGINAL_NAME + MARK_CLEAN per screen
 
     alt canIdsDirty
-        NB->>IO: saveDbc(frameParserConfig)
+        NB->>IO: saveDbc(fpc)
         IO->>API: POST /api/dbc
-        API->>FS: write frame definitions
-        API-->>IO: 200 OK
+        API->>FS: write dbc/content
+        API-->>IO: ok
+        NB->>dispatch: MARK_CAN_IDS_CLEAN
     end
 
-    NB->>D: MARK_CLEAN, MARK_DRIVER_DISPLAY_CLEAN, MARK_CAN_IDS_CLEAN
-    NB->>D: UPDATE_ORIGINAL_NAME (tracks backend copy for rename detection)
+    NB->>NB: "Saved!" toast (2s)
 ```
+
+Screen prefs are **not** part of this flow — they auto-save on a separate 400 ms debounce (see §7).
 
 ---
 
 ## 4. Live Telemetry Flow
 
-`TelemetryPage` opens a WebSocket to the backend and renders live signal values using the driver display screen's widget configuration.
+`TelemetryProvider` owns the `/ws/client` connection. `TelemetryPage` and the log terminal's live feed both read from it via `useTelemetry()`.
 
 ```mermaid
 sequenceDiagram
-    participant TP as TelemetryPage
+    participant TP as TelemetryProvider
     participant WS as WebSocket /ws/client
     participant BE as Backend
     participant PI as Pi (can-reader)
     participant FB as Firebase Auth
 
+    TP->>WS: new WebSocket(/ws/client)
+    WS-->>TP: open
     TP->>FB: getIdToken()
     FB-->>TP: token
-    TP->>WS: connect ws://{host}/ws/client
-    TP->>WS: send { type: "auth", token }
-    WS->>BE: authenticate connection
-    BE-->>WS: connection accepted
+    TP->>WS: { type: "auth", token, client_id: uid }
+    WS->>BE: verifyIdToken + resolve deviceId
+    BE-->>WS: connection tagged { uid, deviceId }
 
     loop CAN data arriving on Pi
-        PI->>BE: signal values via internal pipe
-        BE->>WS: { type: "Telemetry", payload: { signals: { "signal_name": value } } }
+        PI->>BE: telemetry frame via /ws/pi
+        BE->>WS: { type: "Telemetry", device_id, payload: { signals } } (fan-out to matching deviceId)
         WS-->>TP: message event
-        TP->>TP: update signalHistory map<br/>max 30 values per signal (ring buffer)
-        TP->>TP: re-render SmartSignalCard components
+        TP->>TP: append to signals ring buffer (30 values/signal)
+        TP->>TP: enqueue rawMessages (flushed every 50 ms, capped at 500)
     end
 
-    Note over TP: Cards read driverDisplayScreen config<br/>from EditorState to determine<br/>which widget type to render per signal
+    alt socket closes
+        WS-->>TP: close
+        TP->>TP: setTimeout(connect, 1000)
+    end
 ```
 
-**SmartSignalCard rendering logic:**
+**Per-signal rendering logic (`TelemetryPage`):**
 
 ```mermaid
 flowchart TD
-    A[SmartSignalCard receives signal name + history] --> B[Look up widget config\nfrom driverDisplayScreen]
-    B --> C{widget.type?}
-    C -- gauge --> D[Circular gauge\nwith caution/critical arc]
-    C -- bar --> E[Horizontal fill bar\ncolor-coded by threshold]
-    C -- number --> F[Large numeric display\nwith unit label]
-    C -- graph --> G[Scrolling line graph\nover last 30 values]
-    C -- indicator --> H[Boolean dot\ngreen / yellow / red]
+    A[signalHistory Map updates] --> B[TelemetryPage re-renders]
+    B --> C[auto-tile grid: 1/2/3 columns by signal count]
+    C --> D[per-signal GraphCard:<br/>SVG polyline + area fill,<br/>4 Y-axis ticks,<br/>hover crosshair + tooltip]
 ```
+
+There is no longer a per-widget-type SmartSignalCard. Every live signal renders as a line graph regardless of how the editor's widget is configured.
 
 ---
 
-## 5. Log Viewer Flow
+## 5. Cross-Tab Sync
 
-`LogTerminalPage` is a resizable split-panel: history (left) and live feed (right). The divider is draggable, and the split percentage is persisted in `localStorage` under `log-split-pct`.
+When one browser tab saves, deletes, or re-prefs a screen, every other tab on the **same user account** updates in place — no reload, no poll. The backend broadcasts via `/ws/client` and `TelemetryProvider` demultiplexes the events into editor dispatches.
 
-### 5a. History Panel
+```mermaid
+sequenceDiagram
+    participant T1 as Tab 1 (writer)
+    participant API as Backend API
+    participant RT as realtime.service
+    participant T2 as Tab 2 (listener)
+    participant ER as editorReducer
 
-On mount, day summaries are fetched. The user expands a day to load its entries, then clicks "load more" to paginate.
+    T1->>API: POST /api/graphics/screens/{name}
+    API->>API: graphicsService.saveScreen()
+    API->>RT: broadcastToDeviceClients(deviceId,<br/>{ type: "screen_updated", name, screen })
+    RT-->>T2: WSS message
+    T2->>T2: TelemetryProvider.onmessage
+    T2->>ER: UPSERT_SCREEN { name, widgets }
+    ER->>ER: if existing & isDirty → no-op<br/>else replace/insert + originalName = name
+
+    Note over T1,T2: Same mechanism for DELETE (screen_deleted → REMOVE_SCREEN_BY_NAME)<br/>and prefs PUT (screen_prefs_updated → SET_SCREEN_PREFS)
+```
+
+**Safety rule:** `UPSERT_SCREEN` is a no-op against a locally dirty screen — incoming broadcasts never clobber in-progress edits.
+
+---
+
+## 6. Log Viewer Flow
+
+### 6a. History Panel
+
+On mount, day summaries are fetched. The user expands a day to load its first page of entries, then paginates with a cursor.
 
 ```mermaid
 sequenceDiagram
@@ -169,24 +218,24 @@ sequenceDiagram
 
     LT->>API: fetchLogDays()
     API-->>LT: DaySummary[] (date + count per day)
-    LT->>LT: render day list with entry counts
+    LT->>LT: render day list with checkboxes
 
     Note over LT: user clicks a day row
     LT->>API: fetchLogs({ date, limit: 100 })
     API-->>LT: { entries: LogEntry[], nextCursor: number | null }
     LT->>LT: render entries grouped by session
 
-    loop user clicks "load more" button
+    loop user clicks "load more"
         LT->>API: fetchLogs({ date, limit: 100, before: nextCursor })
         API-->>LT: { entries: older entries, nextCursor }
-        LT->>LT: append older entries to day's list
+        LT->>LT: append to day's list
         alt nextCursor is null
-            LT->>LT: hide "load more" button (no more data)
+            LT->>LT: hide "load more" button
         end
     end
 ```
 
-### 5b. Live Feed Panel
+### 6b. Live Feed Panel
 
 The right panel streams live telemetry via the existing `useTelemetry()` hook and auto-scrolls to the bottom unless the user has scrolled up.
 
@@ -196,38 +245,45 @@ sequenceDiagram
     participant TH as useTelemetry() hook
     participant WS as WebSocket /ws/client
 
-    TH->>WS: subscribe (managed by TelemetryContext)
+    TH->>WS: subscribe (managed by TelemetryProvider)
     loop CAN data arriving
-        WS-->>TH: raw message { key, value, ts }
+        WS-->>TH: Telemetry message
+        TH->>TH: rawMessages flushed every 50 ms
         TH-->>LT: rawMessages array updated
-        LT->>LT: render new line with CAN ID, frame name, signal, value
-        alt user has not scrolled up
-            LT->>LT: auto-scroll to bottom
+        LT->>LT: render lines (resolve CAN ID → frame name via frameParserConfig)
+        alt user near bottom
+            LT->>LT: auto-scroll
         end
     end
 ```
 
-### 5c. XLSX Export
+### 6c. CSV Export
 
-Export fetches all pages for the target day(s), pivots entries into a timestamp-by-signal grid, and writes an Excel file via the `xlsx` library.
+Export pages through the target days (selected, filtered, or all), pivots every entry into a `timestamp × signal` grid, and writes a single CSV `Blob`.
 
 ```mermaid
 sequenceDiagram
     participant LT as LogTerminalPage
     participant API as Backend API /api/logs
-    participant XL as xlsx library
 
-    Note over LT: user clicks "XLSX" (per-day) or "DOWNLOAD ALL"
+    Note over LT: user clicks per-day Download<br/>or global Download button
 
-    loop for each target day
+    alt per-day
+        LT->>LT: targetDays = [clickedDay]
+    else global
+        LT->>LT: targetDays = selectedDays ?? filteredDays ?? days
+    end
+
+    loop each target day
         loop paginate until exhausted
             LT->>API: fetchLogs({ date, limit: 500, before: cursor })
             API-->>LT: { entries, nextCursor }
         end
     end
 
-    LT->>XL: pivot entries into rows (timestamp × signal columns)
-    XL-->>LT: write .xlsx file to disk
+    LT->>LT: pivot entries into rows (timestamp × signal columns)
+    LT->>LT: build CSV with csvEscape()
+    LT->>LT: create Blob + anchor download
 ```
 
 **LogEntry shape:**
@@ -241,3 +297,42 @@ sequenceDiagram
   frame_name: string | null  // resolved from DBC, null if unknown
 }
 ```
+
+CSV headers are `timestamp, <signal-1>, <signal-2>, ...` where each signal column uses `frame_name ?? "0x<can_id>"` as its key. Timestamps are emitted as ISO strings.
+
+---
+
+## 7. Screen Prefs Auto-Save
+
+Pin, unpin, drag-reorder, and rename all mark `prefsDirty = true`. A single effect in `EditorProvider` debounces the PUT and marks clean.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant ST as ScreenTabs
+    participant ER as editorReducer
+    participant EP as EditorProvider
+    participant IO as layoutIO.ts
+    participant API as Backend API
+    participant RT as realtime.service
+    participant T2 as Other Tabs
+
+    U->>ST: pin / unpin / drag-reorder
+    ST->>ER: TOGGLE_PIN_SCREEN or REORDER_SCREENS
+    ER-->>EP: prefsDirty = true
+    EP->>EP: setTimeout 400 ms
+
+    EP->>IO: saveScreenPrefs({ pinnedNames, order })
+    IO->>API: PUT /api/prefs/screens
+    API->>FS: write users/{uid}/prefs/screens
+    API->>RT: broadcastToUserClients(uid,<br/>{ type: "screen_prefs_updated", prefs })
+    RT-->>T2: WSS message<br/>dispatch SET_SCREEN_PREFS
+    API-->>IO: ok
+    EP->>ER: MARK_PREFS_CLEAN
+
+    alt PUT fails
+        EP->>EP: keep prefsDirty = true<br/>(retries on next mutation)
+    end
+```
+
+Any subsequent mutation within the 400 ms window resets the timer — the PUT only fires once the user pauses.
