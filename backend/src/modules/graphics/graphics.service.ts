@@ -36,3 +36,18 @@ export async function deleteScreenById(deviceId: string, name: string): Promise<
   await snap.docs[0]!.ref.delete();
   return { msg: "Screen Deleted" };
 }
+
+export async function replaceAllScreensFromPi(deviceId: string, config: unknown): Promise<void> {
+  const screens = (config as { screens: ScreenInfo[] }).screens;
+  if (!Array.isArray(screens)) throw new Error("Invalid graphics config: expected screens[]");
+  const nextNames = new Set(screens.map((s) => s.name));
+
+  const existingNames = await getScreenNames(deviceId);
+  const toDelete = existingNames.filter((name) => !nextNames.has(name));
+
+  await Promise.all([
+    ...screens.map((screen) => saveScreen(deviceId, screen.name, screen)),
+    ...toDelete.map((name) => deleteScreenById(deviceId, name)),
+  ]);
+}
+

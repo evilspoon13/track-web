@@ -4,6 +4,7 @@ import { persistLogBuffer } from "../logs/logs.service";
 import { registerDeviceHeartbeat, markDeviceDisconnected } from "../devices/devices.service";
 import { logger } from "../../common/logger";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
+import * as graphicsService from "../graphics/graphics.service";
 
 interface UploadSession {
   deviceId: string;
@@ -246,6 +247,45 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         }
 
         return activePiId;
+      } else if (obj.type === "graphics_upload") {
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        const content = obj.payload;
+        logger.info("ws", "Pi graphics_upload received", {
+          deviceId,
+          hasContent: content !== null && typeof content === "object",
+        });
+        if (deviceId && content && typeof content === "object") {
+          void (async () => {
+            const existingNames = await graphicsService.getScreenNames(deviceId);
+            const nextScreens = (content as { screens?: unknown }).screens;
+            if (!Array.isArray(nextScreens)) throw new Error("Invalid graphics_upload payload: expected screens[]");
+
+            const nextNames = new Set<string>();
+            for (const s of nextScreens) {
+              const name = (s as { name?: unknown } | null)?.name;
+              if (typeof name === "string" && name.trim().length) nextNames.add(name);
+            }
+            const deletedNames = existingNames.filter((name) => !nextNames.has(name));
+
+            await graphicsService.replaceAllScreensFromPi(deviceId, content);
+
+            for (const s of nextScreens) {
+              const screen = s as { name?: unknown } | null;
+              if (!screen || typeof screen !== "object") continue;
+              const name = screen.name;
+              if (typeof name !== "string" || !name.trim().length) continue;
+              broadcastToDeviceClients(deviceId, { type: "screen_updated", name, screen: s });
+            }
+            for (const name of deletedNames) {
+              broadcastToDeviceClients(deviceId, { type: "screen_deleted", name });
+            }
+
+            logger.info("graphics", "Applied Pi graphics_upload", { deviceId });
+          })().catch((error) => {
+            logger.warn("graphics", "Failed to apply Pi graphics_upload", { deviceId, error: String(error) });
+          });
+        }
+        return deviceId || activePiId;
       } else if (obj.type === "log_upload_start") {
         const deviceId = activePiId ?? normalizePiId(obj) ?? "";
         const filename = obj.filename as string;
