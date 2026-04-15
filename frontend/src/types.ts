@@ -129,6 +129,15 @@ export interface LiveLogLine {
   value: number;
 }
 
+export interface GpsPoint {
+  lat: number;
+  lon: number;
+  speed_kmh: number;
+  heading: number;
+  ts: number;       // backend-attached (Pi time)
+  gps_ts: number;   // GPS hardware timestamp
+}
+
 export type EditorAction =
   | { type: "ADD_WIDGET"; payload: PlacedWidget }
   | { type: "MOVE_WIDGET"; payload: { id: string; col: number; row: number } }

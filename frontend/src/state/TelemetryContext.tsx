@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { LiveLogLine } from "../types";
+import type { GpsPoint, LiveLogLine } from "../types";
 import { useEditorDispatch } from "./EditorContext";
 import { screenFromBackendPayload } from "../utils/layoutIO";
 
@@ -7,14 +7,25 @@ const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== "false";
 const MAX_HISTORY = 30;
 const MAX_RAW_MESSAGES = 500;
 const RECONNECT_DELAY_MS = 1000;
+const GPS_NO_FRAME_TIMEOUT_MS = 30000;
+const GPS_LOW_SPEED_TIMEOUT_MS = 60000;
+const GPS_LOW_SPEED_THRESHOLD_KMH = 1;
 
 interface TelemetryState {
   signals: Record<string, number[]>;
   rawMessages: LiveLogLine[];
   connected: boolean;
+  latestGps: GpsPoint | null;
+  gpsSession: GpsPoint[];
 }
 
-const TelemetryContext = createContext<TelemetryState>({ signals: {}, rawMessages: [], connected: false });
+const TelemetryContext = createContext<TelemetryState>({
+  signals: {},
+  rawMessages: [],
+  connected: false,
+  latestGps: null,
+  gpsSession: [],
+});
 
 export function useTelemetry() {
   return useContext(TelemetryContext);
@@ -25,10 +36,51 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
   const [signals, setSignals] = useState<Record<string, number[]>>({});
   const [rawMessages, setRawMessages] = useState<LiveLogLine[]>([]);
   const [connected, setConnected] = useState(false);
+  const [latestGps, setLatestGps] = useState<GpsPoint | null>(null);
+  const [gpsSession, setGpsSession] = useState<GpsPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const rawBufRef = useRef<LiveLogLine[]>([]);
   const flushTimerRef = useRef<number | null>(null);
+  const latestGpsRef = useRef<GpsPoint | null>(null);
+  const lowSpeedSinceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    latestGpsRef.current = latestGps;
+  }, [latestGps]);
+
+  // Session-end detector: clear the current trace when the car has been
+  // stopped for 60 s or GPS frames stop arriving for 30 s. Next fix starts
+  // a fresh session automatically.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const latest = latestGpsRef.current;
+      if (!latest) {
+        lowSpeedSinceRef.current = null;
+        return;
+      }
+      const now = Date.now();
+      const endSession = () => {
+        setGpsSession([]);
+        setLatestGps(null);
+        lowSpeedSinceRef.current = null;
+      };
+      if (now - latest.ts > GPS_NO_FRAME_TIMEOUT_MS) {
+        endSession();
+        return;
+      }
+      if (latest.speed_kmh < GPS_LOW_SPEED_THRESHOLD_KMH) {
+        if (lowSpeedSinceRef.current === null) {
+          lowSpeedSinceRef.current = now;
+        } else if (now - lowSpeedSinceRef.current > GPS_LOW_SPEED_TIMEOUT_MS) {
+          endSession();
+        }
+      } else {
+        lowSpeedSinceRef.current = null;
+      }
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -109,6 +161,22 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
             return;
           }
 
+          if (type === "gps") {
+            const payload = msg.payload as GpsPoint | undefined;
+            if (!payload) return;
+            const point: GpsPoint = {
+              lat: Number(payload.lat),
+              lon: Number(payload.lon),
+              speed_kmh: Number(payload.speed_kmh),
+              heading: Number(payload.heading),
+              ts: Number(payload.ts),
+              gps_ts: Number(payload.gps_ts),
+            };
+            setLatestGps(point);
+            setGpsSession((prev) => [...prev, point]);
+            return;
+          }
+
           if (type !== "Telemetry") return;
           const payload = msg.payload as { signals?: Record<string, number> } | undefined;
           const incoming = payload?.signals ?? {};
@@ -163,7 +231,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <TelemetryContext.Provider value={{ signals, rawMessages, connected }}>
+    <TelemetryContext.Provider value={{ signals, rawMessages, connected, latestGps, gpsSession }}>
       {children}
     </TelemetryContext.Provider>
   );

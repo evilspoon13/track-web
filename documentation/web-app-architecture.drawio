@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net">
   <diagram name="Page-1" id="uKVukcnOgO8zwZS4xEeu">
-    <mxGraphModel dx="2066" dy="1079" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+    <mxGraphModel dx="1740" dy="908" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -29,16 +29,13 @@
           <mxGeometry height="58" width="230" x="80" y="624" as="geometry" />
         </mxCell>
         <mxCell id="wsGw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;strokeWidth=2;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;&lt;b&gt;WebSocket Gateway&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;/ws/pi  ·  /ws/client&lt;/font&gt;&lt;/font&gt;" vertex="1">
-          <mxGeometry height="66" width="260" x="600" y="180" as="geometry" />
+          <mxGeometry height="66" width="260" x="760" y="180" as="geometry" />
         </mxCell>
         <mxCell id="restApi" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;&lt;b&gt;REST API&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;screens · dbc · prefs · logs · device&lt;/font&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="66" width="260" x="600" y="320" as="geometry" />
         </mxCell>
         <mxCell id="authMw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(31, 31, 31));&quot;&gt;&lt;b style=&quot;&quot;&gt;Auth Middleware&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;Firebase token · device secret&lt;/font&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="66" width="260" x="960" y="650" as="geometry" />
-        </mxCell>
-        <mxCell id="syncSvc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(10, 10, 10));&quot;&gt;&lt;b&gt;Versioned Sync Service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;reconciles Pi ↔ cloud revisions&lt;/font&gt;&lt;/font&gt;" vertex="1">
-          <mxGeometry height="66" width="260" x="960" y="180" as="geometry" />
         </mxCell>
         <mxCell id="fanout" parent="1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;strokeWidth=2;fillColor=light-dark(#FFFFFF,#3399FF);fontSize=13;fontStyle=0;" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(23, 23, 23));&quot;&gt;&lt;b&gt;Realtime Fan-Out&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;&quot;&gt;scoped per user / per device&lt;/font&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="66" width="260" x="960" y="320" as="geometry" />
@@ -130,23 +127,6 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_rest_sync" edge="1" parent="1" source="restApi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="syncSvc" value="commit&amp;nbsp;&lt;div&gt;revision&lt;/div&gt;">
-          <mxGeometry relative="1" x="0.4167" as="geometry">
-            <mxPoint as="offset" />
-            <Array as="points">
-              <mxPoint x="930" y="340" />
-              <mxPoint x="930" y="200" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_ws_sync" edge="1" parent="1" source="wsGw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;s   tartArrow=block;startFill=1;endArrow=block;endFill=1;" target="syncSvc" value="sync protocol">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="730" y="160" />
-              <mxPoint x="1090" y="160" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
         <mxCell id="e_rest_fan" edge="1" parent="1" source="restApi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="fanout" value="broadcast event">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
@@ -159,24 +139,15 @@
           <mxGeometry relative="1" x="0.3605" as="geometry">
             <mxPoint as="offset" />
             <Array as="points">
-              <mxPoint x="730" y="270" />
-              <mxPoint x="1090" y="270" />
+              <mxPoint x="1090" y="213" />
             </Array>
           </mxGeometry>
         </mxCell>
         <mxCell id="e_ws_log" edge="1" parent="1" source="wsGw" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=11;endArrow=block;endFill=1;" target="logIngest" value="log_upload">
-          <mxGeometry relative="1" x="0.2" as="geometry">
+          <mxGeometry relative="1" x="-0.314" as="geometry">
             <mxPoint as="offset" />
             <Array as="points">
-              <mxPoint x="890" y="220" />
-              <mxPoint x="890" y="470" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_sync_fs" edge="1" parent="1" source="syncSvc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=2;fontSize=1   1;startArrow=block;startFill=1;endArrow=block;endFill=1;" target="firestore" value="versioned writes">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="1380" y="213" />
+              <mxPoint x="910" y="470" />
             </Array>
           </mxGeometry>
         </mxCell>

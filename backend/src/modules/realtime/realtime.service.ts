@@ -198,7 +198,7 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         data?: unknown;
         total_chunks?: unknown;
       };
-      if (obj.type === "telemetry" || obj.type === "heartbeat") {
+      if (obj.type === "telemetry" || obj.type === "heartbeat" || obj.type === "gps") {
         logger.debug("ws", `Pi message: ${obj.type}`, { device_id: obj.device_id });
       } else {
         logger.info("ws", `Pi message: ${obj.type}`, { device_id: obj.device_id });
@@ -242,6 +242,32 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
                 clientConnection.deviceId === activePiId
               ) {
                 clientConnection.socket.send(telemetryPayload);
+              }
+            }
+          }
+        }
+
+        return activePiId;
+      } else if (obj.type === "gps") {
+        if (!activePiId) {
+          activePiId = normalizePiId(obj) || activePiId;
+        }
+
+        if (activePiId) {
+          const connection = piSockets.get(activePiId);
+          if (connection && connection.socket === socket) {
+            const gpsPayload = JSON.stringify({
+              type: "gps",
+              device_id: activePiId,
+              payload: obj.payload ?? obj,
+            });
+
+            for (const clientConnection of clientSockets.values()) {
+              if (
+                clientConnection.socket.readyState === WebSocket.OPEN &&
+                clientConnection.deviceId === activePiId
+              ) {
+                clientConnection.socket.send(gpsPayload);
               }
             }
           }
