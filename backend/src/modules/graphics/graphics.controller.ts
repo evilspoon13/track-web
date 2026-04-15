@@ -1,14 +1,11 @@
 import type { Request, Response } from "express";
 import type { ScreenInfo } from "./graphics.types";
 import * as graphicsService from "./graphics.service";
-import { normalizeConfigForPi, sendSyncDownloadToPi, broadcastToDeviceClients } from "../realtime/realtime.service";
-import * as SyncService from "../sync/sync.service";
+import { sendConfigToPi, broadcastToDeviceClients } from "../realtime/realtime.service";
 
 async function pushFullConfigToPi(deviceId: string) {
   const allScreens = await graphicsService.getAllScreens(deviceId);
-  const payload = normalizeConfigForPi({ screens: allScreens });
-  const state = await SyncService.commitCloudGeneratedGraphics(deviceId, payload);
-  sendSyncDownloadToPi(deviceId, SyncService.buildDownloadMessage(state));
+  sendConfigToPi(deviceId, { screens: allScreens });
 }
 
 export async function getScreenNames(req: Request, res: Response) {
@@ -51,7 +48,6 @@ export async function deleteScreenById(req: Request<{ screenId: string }>, res: 
       return;
     }
     broadcastToDeviceClients(req.deviceId!, { type: "screen_deleted", name: screenName });
-    await pushFullConfigToPi(req.deviceId!);
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ msg: error });
