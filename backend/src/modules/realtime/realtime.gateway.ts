@@ -16,26 +16,12 @@ export function createRealtimeGateway(server: HttpServer): void {
       const secret         = req.headers["x-device-secret"] as string | undefined;
       const expectedSecret = process.env.DEVICE_SECRET ?? "";
       const secretOk       = expectedSecret === "" || secret === expectedSecret;
-      const exposeSecrets  = process.env.LOG_DEVICE_SECRET === "true";
-      const remoteAddress  = req.socket.remoteAddress ?? null;
-      const forwardedFor   = (req.headers["x-forwarded-for"] as string | undefined) ?? null;
-      const flyClientIp    = (req.headers["fly-client-ip"] as string | undefined) ?? null;
-      const cfConnectingIp = (req.headers["cf-connecting-ip"] as string | undefined) ?? null;
-      const userAgent      = (req.headers["user-agent"] as string | undefined) ?? null;
-      const origin         = (req.headers["origin"] as string | undefined) ?? null;
       logger.info("ws", "Pi websocket opened", {
         path,
         deviceId: deviceId ?? null,
         hasSecretHeader: typeof secret === "string" && secret.length > 0,
         secretOk,
         deviceSecretRequired: expectedSecret !== "",
-        remoteAddress,
-        forwardedFor,
-        flyClientIp,
-        cfConnectingIp,
-        userAgent,
-        origin,
-        ...(exposeSecrets ? { receivedSecret: secret ?? null, expectedSecret } : {}),
       });
       if (!deviceId || !secretOk) {
         logger.warn("ws", "Pi websocket unauthorized", {
@@ -44,13 +30,6 @@ export function createRealtimeGateway(server: HttpServer): void {
           hasSecretHeader: typeof secret === "string" && secret.length > 0,
           secretOk,
           deviceSecretRequired: expectedSecret !== "",
-          remoteAddress,
-          forwardedFor,
-          flyClientIp,
-          cfConnectingIp,
-          userAgent,
-          origin,
-          ...(exposeSecrets ? { receivedSecret: secret ?? null, expectedSecret } : {}),
         });
         socket.close(1008, "Unauthorized");
         return;
