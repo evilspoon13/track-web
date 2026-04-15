@@ -2,7 +2,6 @@ import { db } from "../../lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import type { ApiMessage } from "../../common/types/api.types";
 import type { ScreenInfo } from "./graphics.types";
-import { logger } from "../../common/logger";
 
 const col = (deviceId: string) =>
   db.collection("devices").doc(deviceId).collection("screens");
@@ -38,68 +37,17 @@ export async function deleteScreenById(deviceId: string, name: string): Promise<
   return { msg: "Screen Deleted" };
 }
 
-function parseHexMaybe(value: unknown): number | unknown {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed.startsWith("0x")) return value;
-  const parsed = Number.parseInt(trimmed.slice(2), 16);
-  return Number.isFinite(parsed) ? parsed : value;
+export async function replaceAllScreensFromPi(deviceId: string, config: unknown): Promise<void> {
+  const screens = (config as { screens: ScreenInfo[] }).screens;
+  if (!Array.isArray(screens)) throw new Error("Invalid graphics config: expected screens[]");
+  const nextNames = new Set(screens.map((s) => s.name));
+
+  const existingNames = await getScreenNames(deviceId);
+  const toDelete = existingNames.filter((name) => !nextNames.has(name));
+
+  await Promise.all([
+    ...screens.map((screen) => saveScreen(deviceId, screen.name, screen)),
+    ...toDelete.map((name) => deleteScreenById(deviceId, name)),
+  ]);
 }
 
-function normalizeWidgetFromPi(widget: Record<string, unknown>): Record<string, unknown> {
-  const out = { ...widget };
-  if (out.data && typeof out.data === "object") {
-    const data = out.data as Record<string, unknown>;
-    out.data = { ...data, can_id: parseHexMaybe(data.can_id) };
-  }
-  if (out.graph && typeof out.graph === "object") {
-    const graph = out.graph as Record<string, unknown>;
-    out.graph = { ...graph, x_can_id: parseHexMaybe(graph.x_can_id) };
-  }
-  return out;
-}
-
-function coerceScreenFromPi(screen: unknown): ScreenInfo | null {
-  if (!screen || typeof screen !== "object") return null;
-  const s = screen as Record<string, unknown>;
-  if (typeof s.name !== "string" || !s.name.trim()) return null;
-  const widgets = Array.isArray(s.widgets) ? (s.widgets as unknown[]) : [];
-  return {
-    ...(s as unknown as ScreenInfo),
-    name: s.name,
-    widgets: widgets
-      .filter((w): w is Record<string, unknown> => !!w && typeof w === "object")
-      .map((w) => normalizeWidgetFromPi(w)) as unknown as ScreenInfo["widgets"],
-  };
-}
-
-export async function replaceAllScreensFromPi(deviceId: string, screens: unknown[]): Promise<void> {
-  const normalizedScreens = screens.map(coerceScreenFromPi).filter((s): s is ScreenInfo => s !== null);
-  const nextIds = new Set<string>(normalizedScreens.map((s) => encodeURIComponent(s.name)));
-
-  const existing = await col(deviceId).get();
-  logger.info("sync", "Replacing screens from Pi", {
-    deviceId,
-    incomingScreens: screens.length,
-    normalizedScreens: normalizedScreens.length,
-    existingDocs: existing.docs.length,
-  });
-  const batch = db.batch();
-
-  for (const doc of existing.docs) {
-    if (!nextIds.has(doc.id)) batch.delete(doc.ref);
-  }
-
-  for (const screen of normalizedScreens) {
-    const id = encodeURIComponent(screen.name);
-    batch.set(col(deviceId).doc(id), { ...screen, updatedAt: FieldValue.serverTimestamp() });
-  }
-
-  await batch.commit();
-  logger.info("sync", "Replaced screens from Pi", {
-    deviceId,
-    keptOrUpserted: normalizedScreens.length,
-    deleted: existing.docs.length - nextIds.size < 0 ? 0 : existing.docs.length - nextIds.size,
-  });
-}

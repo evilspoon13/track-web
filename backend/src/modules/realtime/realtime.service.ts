@@ -4,10 +4,7 @@ import { persistLogBuffer } from "../logs/logs.service";
 import { registerDeviceHeartbeat, markDeviceDisconnected } from "../devices/devices.service";
 import { logger } from "../../common/logger";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
-import * as SyncService from "../sync/sync.service";
 import * as graphicsService from "../graphics/graphics.service";
-import * as dbcService from "../dbc/dbc.service";
-import { Dbc } from "candied";
 
 interface UploadSession {
   deviceId: string;
@@ -199,12 +196,6 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         chunk_index?: unknown;
         data?: unknown;
         total_chunks?: unknown;
-        file_id?: unknown;
-        base_version_id?: unknown;
-        change_id?: unknown;
-        content_b64?: unknown;
-        protocol?: unknown;
-        files?: unknown;
       };
       if (obj.type === "telemetry" || obj.type === "heartbeat") {
         logger.debug("ws", `Pi message: ${obj.type}`, { device_id: obj.device_id });
@@ -229,42 +220,6 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
           if (connection && connection.socket === socket) {
             connection.lastHeartbeat = Date.now();
           }
-        }
-      } else if (obj.type === "sync_state") {
-        logger.info("sync", "Pi sync_state received", { device_id: obj.device_id });
-        const nextPiId = normalizePiId(obj);
-        if (nextPiId) {
-          const connection = piSockets.get(nextPiId);
-          if (!connection || connection.socket !== socket) {
-            registerPiById(nextPiId, socket);
-          } else {
-            connection.lastHeartbeat = Date.now();
-          }
-          activePiId = nextPiId;
-          registerDeviceHeartbeat(nextPiId).catch(console.error);
-        }
-
-        if (activePiId) {
-          const hello = obj as SyncService.SyncStateMessage;
-          void SyncService.planForState(activePiId, hello, SyncService.GRAPHICS_FILE_ID)
-            .then((plan) => {
-              logger.info("sync", "Sending sync_plan", { deviceId: activePiId, fileId: SyncService.GRAPHICS_FILE_ID, action: plan.action });
-              const envelope = { device_id: activePiId, ...plan };
-              socket.send(JSON.stringify(envelope));
-            })
-            .catch((error) => {
-              logger.warn("sync", "Failed to plan sync_state", { deviceId: activePiId, fileId: SyncService.GRAPHICS_FILE_ID, error: String(error) });
-            });
-
-          void SyncService.planForState(activePiId, hello, SyncService.DISPLAY_DBC_FILE_ID)
-            .then((plan) => {
-              logger.info("sync", "Sending sync_plan", { deviceId: activePiId, fileId: SyncService.DISPLAY_DBC_FILE_ID, action: plan.action });
-              const envelope = { device_id: activePiId, ...plan };
-              socket.send(JSON.stringify(envelope));
-            })
-            .catch((error) => {
-              logger.warn("sync", "Failed to plan sync_state", { deviceId: activePiId, fileId: SyncService.DISPLAY_DBC_FILE_ID, error: String(error) });
-            });
         }
       } else if (obj.type === "telemetry") {
         if (!activePiId) {
@@ -292,117 +247,45 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
         }
 
         return activePiId;
-      } else if (obj.type === "sync_upload") {
+      } else if (obj.type === "graphics_upload") {
         const deviceId = activePiId ?? normalizePiId(obj) ?? "";
-        if (!deviceId) return activePiId;
-        if (!activePiId) {
-          registerPiById(deviceId, socket);
-          activePiId = deviceId;
-        }
-
-        const fileId = typeof obj.file_id === "string" ? obj.file_id : "";
-        const baseRev = typeof obj.base_version_id === "number" ? obj.base_version_id : NaN;
-        const changeId = typeof obj.change_id === "string" ? obj.change_id : "";
-        const contentB64 = typeof obj.content_b64 === "string" ? obj.content_b64 : "";
-
-        const allowed = fileId === SyncService.GRAPHICS_FILE_ID || fileId === SyncService.DISPLAY_DBC_FILE_ID;
-        if (!allowed) return activePiId;
-        if (!Number.isFinite(baseRev)) return activePiId;
-        if (!changeId || !contentB64) return activePiId;
-
-        const content = Buffer.from(contentB64, "base64");
-        if (content.byteLength === 0) return activePiId;
-
-        logger.info("sync", "Pi sync_upload received", {
+        const content = obj.payload;
+        logger.info("ws", "Pi graphics_upload received", {
           deviceId,
-          fileId,
-          base_version_id: baseRev,
-          change_id: changeId,
-          content_size: content.byteLength,
+          hasContent: content !== null && typeof content === "object",
         });
+        if (deviceId && content && typeof content === "object") {
+          void (async () => {
+            const existingNames = await graphicsService.getScreenNames(deviceId);
+            const nextScreens = (content as { screens?: unknown }).screens;
+            if (!Array.isArray(nextScreens)) throw new Error("Invalid graphics_upload payload: expected screens[]");
 
-        // Validate payload before committing.
-        let screensFromPi: unknown[] | null = null;
-        let rawDbc: string | null = null;
-        if (fileId === SyncService.GRAPHICS_FILE_ID) {
-          try {
-            const parsedGraphics = JSON.parse(content.toString("utf8")) as { screens?: unknown };
-            if (!Array.isArray(parsedGraphics.screens)) throw new Error("Missing screens");
-            screensFromPi = parsedGraphics.screens as unknown[];
-          } catch {
-            logger.warn("sync", "Rejected Pi upload: invalid graphics json", { deviceId, change_id: changeId });
-            socket.send(JSON.stringify({
-              device_id: deviceId,
-              type: "sync_reject",
-              file_id: fileId,
-              reason: "invalid_json",
-              change_id: changeId,
-            }));
-            return activePiId;
-          }
-        } else if (fileId === SyncService.DISPLAY_DBC_FILE_ID) {
-          try {
-            rawDbc = content.toString("utf8");
-            const dbc = new Dbc();
-            dbc.load(rawDbc);
-          } catch {
-            logger.warn("sync", "Rejected Pi upload: invalid dbc", { deviceId, change_id: changeId });
-            socket.send(JSON.stringify({
-              device_id: deviceId,
-              type: "sync_reject",
-              file_id: fileId,
-              reason: "invalid_dbc",
-              change_id: changeId,
-            }));
-            return activePiId;
-          }
-        }
+            const nextNames = new Set<string>();
+            for (const s of nextScreens) {
+              const name = (s as { name?: unknown } | null)?.name;
+              if (typeof name === "string" && name.trim().length) nextNames.add(name);
+            }
+            const deletedNames = existingNames.filter((name) => !nextNames.has(name));
 
-        void SyncService.commitPiUpload(deviceId, fileId, content, changeId, baseRev)
-          .then(({ state }) => {
-            // Apply to existing stores so the web UI / logs see the Pi edit.
-            if (fileId === SyncService.GRAPHICS_FILE_ID && screensFromPi) {
-              void graphicsService.replaceAllScreensFromPi(deviceId, screensFromPi)
-                .then(() => logger.info("sync", "Applied graphics from Pi", { deviceId, change_id: changeId, version_id: state.version_id }))
-                .catch((error) => logger.warn("sync", "Failed to apply graphics from Pi", { deviceId, change_id: changeId, error: String(error) }));
-            } else if (fileId === SyncService.DISPLAY_DBC_FILE_ID && rawDbc !== null) {
-              void dbcService.uploadDbc(deviceId, rawDbc)
-                .then(() => logger.info("sync", "Applied DBC from Pi", { deviceId, change_id: changeId, version_id: state.version_id }))
-                .catch((error) => logger.warn("sync", "Failed to apply DBC from Pi", { deviceId, change_id: changeId, error: String(error) }));
+            await graphicsService.replaceAllScreensFromPi(deviceId, content);
+
+            for (const s of nextScreens) {
+              const screen = s as { name?: unknown } | null;
+              if (!screen || typeof screen !== "object") continue;
+              const name = screen.name;
+              if (typeof name !== "string" || !name.trim().length) continue;
+              broadcastToDeviceClients(deviceId, { type: "screen_updated", name, screen: s });
+            }
+            for (const name of deletedNames) {
+              broadcastToDeviceClients(deviceId, { type: "screen_deleted", name });
             }
 
-            socket.send(JSON.stringify({
-              device_id: deviceId,
-              type: "sync_commit",
-              file_id: fileId,
-              version_id: state.version_id,
-              modified_by: state.modified_by,
-              modified_at_ms: state.modified_at_ms,
-              change_id: state.change_id,
-            }));
-          })
-          .catch((error) => {
-            if (error instanceof SyncService.BaseRevMismatchError) {
-              logger.info("sync", "Rejected Pi upload: base_rev_mismatch", {
-                deviceId,
-                fileId,
-                change_id: changeId,
-                got_base_version_id: baseRev,
-                expected_base_version_id: error.current.version_id,
-              });
-              socket.send(JSON.stringify({
-                device_id: deviceId,
-                type: "sync_reject",
-                file_id: fileId,
-                reason: "base_rev_mismatch",
-                change_id: changeId,
-                expected_base_version_id: error.current.version_id,
-                download: SyncService.buildDownloadMessage(error.current),
-              }));
-              return;
-            }
-            logger.warn("sync", "Pi upload failed", { deviceId, fileId, error: String(error) });
+            logger.info("graphics", "Applied Pi graphics_upload", { deviceId });
+          })().catch((error) => {
+            logger.warn("graphics", "Failed to apply Pi graphics_upload", { deviceId, error: String(error) });
           });
+        }
+        return deviceId || activePiId;
       } else if (obj.type === "log_upload_start") {
         const deviceId = activePiId ?? normalizePiId(obj) ?? "";
         const filename = obj.filename as string;
@@ -463,7 +346,7 @@ function toHexCanId(n: unknown): string {
   return "0x" + Math.floor(n).toString(16);
 }
 
-export function normalizeConfigForPi(config: unknown): unknown {
+function normalizeConfigForPi(config: unknown): unknown {
   if (!config || typeof config !== "object") return config;
   const c = config as { screens?: Array<{ widgets?: Array<Record<string, unknown>> }> };
   if (!Array.isArray(c.screens)) return config;
@@ -493,10 +376,6 @@ export function sendConfigToPi(deviceId: string, screenInfo: unknown): boolean {
     type: "config_update",
     payload: normalizeConfigForPi(screenInfo),
   });
-}
-
-export function sendSyncDownloadToPi(deviceId: string, download: SyncService.SyncDownloadMessage): boolean {
-  return sendMessageToPi(deviceId, download);
 }
 
 export function broadcastToDeviceClients(deviceId: string, message: unknown): number {
