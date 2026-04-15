@@ -163,7 +163,10 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
 
           if (type === "gps") {
             const payload = msg.payload as GpsPoint | undefined;
-            if (!payload) return;
+            if (!payload) {
+              console.warn("[gps] frame missing payload, dropped", msg);
+              return;
+            }
             const point: GpsPoint = {
               lat: Number(payload.lat),
               lon: Number(payload.lon),
@@ -172,6 +175,10 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
               ts: Number(payload.ts),
               gps_ts: Number(payload.gps_ts),
             };
+            if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) {
+              console.warn("[gps] invalid lat/lon, dropped", payload);
+              return;
+            }
             setLatestGps(point);
             setGpsSession((prev) => [...prev, point]);
             return;

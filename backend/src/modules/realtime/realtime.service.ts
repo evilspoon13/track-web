@@ -253,6 +253,21 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
           activePiId = normalizePiId(obj) || activePiId;
         }
 
+        // Validate payload shape. Matches the lifecycle/error-only log
+        // pattern used by log_upload and graphics_upload — silent on the
+        // happy path, warn only on malformed frames.
+        const raw = (obj.payload ?? obj) as Record<string, unknown>;
+        const lat = typeof raw.lat === "number" ? raw.lat : NaN;
+        const lon = typeof raw.lon === "number" ? raw.lon : NaN;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          logger.warn("ws", "Malformed GPS frame", {
+            device_id: activePiId,
+            lat: raw.lat,
+            lon: raw.lon,
+          });
+          return activePiId;
+        }
+
         if (activePiId) {
           const connection = piSockets.get(activePiId);
           if (connection && connection.socket === socket) {
