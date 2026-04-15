@@ -5,6 +5,7 @@ import { registerDeviceHeartbeat, markDeviceDisconnected } from "../devices/devi
 import { logger } from "../../common/logger";
 import { adminAuth, db } from "../../lib/firebaseAdmin";
 import * as graphicsService from "../graphics/graphics.service";
+import * as dbcService from "../dbc/dbc.service";
 
 interface UploadSession {
   deviceId: string;
@@ -284,6 +285,19 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
           })().catch((error) => {
             logger.warn("graphics", "Failed to apply Pi graphics_upload", { deviceId, error: String(error) });
           });
+        }
+        return deviceId || activePiId;
+      } else if (obj.type === "dbc_upload") {
+        const deviceId = activePiId ?? normalizePiId(obj) ?? "";
+        const raw = obj.payload;
+        logger.info("ws", "Pi dbc_upload received", {
+          deviceId,
+          rawType: typeof raw,
+        });
+        if (deviceId && typeof raw === "string") {
+          void dbcService.uploadDbc(deviceId, raw)
+            .then(() => logger.info("dbc", "Applied Pi dbc_upload", { deviceId }))
+            .catch((error) => logger.warn("dbc", "Failed to apply Pi dbc_upload", { deviceId, error: String(error) }));
         }
         return deviceId || activePiId;
       } else if (obj.type === "log_upload_start") {
