@@ -22,9 +22,6 @@ export const allowedSizes: Record<WidgetType, WidgetSize[]> = {
     { cols: 3, rows: 1 },
   ],
   bar: [
-    { cols: 2, rows: 1 },
-    { cols: 3, rows: 1 },
-    { cols: 4, rows: 1 },
     { cols: 1, rows: 2 },
     { cols: 1, rows: 3 },
   ],
