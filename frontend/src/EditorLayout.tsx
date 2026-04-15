@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { LogOut } from "lucide-react";
 import { auth } from "./lib/firebase";
 import { useEditorState, useEditorDispatch } from "./state/EditorContext";
-import { useTelemetry } from "./state/TelemetryContext";
+import { authFetch } from "./utils/layoutIO";
 import Navbar from "./components/Navbar";
 import GridCanvas from "./components/GridCanvas";
 import ConfigPanel from "./components/ConfigPanel";
@@ -25,7 +25,15 @@ interface EditorLayoutProps {
 export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const state = useEditorState();
   const dispatch = useEditorDispatch();
-  const { connected } = useTelemetry();
+  const [deviceConnected, setDeviceConnected] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    authFetch("/api/device")
+      .then((r) => r.json())
+      .then((data: { connected?: boolean }) => setDeviceConnected(data.connected))
+      .catch(() => setDeviceConnected(undefined));
+  }, []);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState({ w: 80, h: 80 });
   const [page, setPage] = useState<"display" | "telemetry" | "logs" | "device">("display");
@@ -302,8 +310,8 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
           </div>
           <div className="absolute right-4 flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <div className={`h-2 w-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"}`} />
-              <span className="text-xs text-gray-400">{connected ? "Connected" : "Disconnected"}</span>
+              <div className={`h-2 w-2 rounded-full ${deviceConnected ? "bg-green-400" : "bg-gray-600"}`} />
+              <span className="text-xs text-gray-400">{deviceConnected ? "Pi online" : "Pi offline"}</span>
             </div>
             {AUTH_ENABLED && auth.currentUser && (
               <div className="relative">
