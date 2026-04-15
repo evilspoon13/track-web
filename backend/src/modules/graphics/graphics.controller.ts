@@ -9,6 +9,28 @@ function parseCanId(v: unknown): number {
   return NaN;
 }
 
+function toHexCanId(v: unknown): string {
+  if (typeof v === "number" && Number.isFinite(v)) return "0x" + Math.floor(v).toString(16);
+  if (typeof v === "string") return v;
+  return "0x0";
+}
+
+function denormalizeScreen(screen: ScreenInfo): ScreenInfo {
+  return {
+    ...screen,
+    widgets: (screen.widgets ?? []).map((w) => {
+      const out: typeof w = {
+        ...w,
+        data: { ...w.data, can_id: toHexCanId(w.data?.can_id) as unknown as number },
+      };
+      if (w.graph && w.graph.x_can_id !== undefined) {
+        out.graph = { ...w.graph, x_can_id: toHexCanId(w.graph.x_can_id) as unknown as number };
+      }
+      return out;
+    }),
+  };
+}
+
 function normalizeScreen(screen: ScreenInfo): ScreenInfo {
   return {
     ...screen,
@@ -51,7 +73,7 @@ export async function getScreenById(req: Request<{ screenId: string }>, res: Res
       res.status(404).json({ msg: "Screen not found" });
       return;
     }
-    res.status(200).json(screen);
+    res.status(200).json(denormalizeScreen(screen));
   } catch (error) {
     res.status(500).json({ msg: error });
   }
