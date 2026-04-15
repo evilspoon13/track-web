@@ -31,7 +31,7 @@ export interface positionInfo {
 }
 
 export interface dataInfo {
-    can_id: string,
+    can_id: number,
     can_id_label: string,
     signal: string,
     unit: string,
@@ -52,7 +52,7 @@ export interface graphInfo {
     max_points: number,
 
     // XY secondary CAN ID data
-    x_can_id?: string,
+    x_can_id?: number,
     x_signal?: string,
     x_unit?: DataFieldType,
     x_min?: number,

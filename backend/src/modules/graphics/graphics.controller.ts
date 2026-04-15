@@ -3,6 +3,28 @@ import type { ScreenInfo } from "./graphics.types";
 import * as graphicsService from "./graphics.service";
 import { sendConfigToPi, broadcastToDeviceClients } from "../realtime/realtime.service";
 
+function parseCanId(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.length > 0) return Number(v);
+  return NaN;
+}
+
+function normalizeScreen(screen: ScreenInfo): ScreenInfo {
+  return {
+    ...screen,
+    widgets: (screen.widgets ?? []).map((w) => {
+      const normalized: typeof w = {
+        ...w,
+        data: { ...w.data, can_id: parseCanId(w.data?.can_id) },
+      };
+      if (w.graph && w.graph.x_can_id !== undefined) {
+        normalized.graph = { ...w.graph, x_can_id: parseCanId(w.graph.x_can_id) };
+      }
+      return normalized;
+    }),
+  };
+}
+
 async function pushFullConfigToPi(deviceId: string) {
   const allScreens = await graphicsService.getAllScreens(deviceId);
   sendConfigToPi(deviceId, { screens: allScreens });
@@ -61,7 +83,7 @@ export async function updateScreen(req: Request<{ screenId: string }>, res: Resp
       return;
     }
     const screenId = req.params.screenId;
-    const screen = req.body as ScreenInfo;
+    const screen = normalizeScreen(req.body as ScreenInfo);
     await graphicsService.saveScreen(req.deviceId, screenId, screen);
     broadcastToDeviceClients(req.deviceId, { type: "screen_updated", name: screen.name, screen });
     await pushFullConfigToPi(req.deviceId);
