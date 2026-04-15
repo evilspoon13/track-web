@@ -6,7 +6,7 @@ export const GRID_ROWS = 6;
 export const defaultSize: Record<WidgetType, WidgetSize> = {
   gauge: { cols: 2, rows: 2 },
   number: { cols: 2, rows: 1 },
-  bar: { cols: 3, rows: 1 },
+  bar: { cols: 1, rows: 3 },
   graph: { cols: 4, rows: 2 },
   indicator: { cols: 1, rows: 1 },
 };

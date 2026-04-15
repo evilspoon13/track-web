@@ -415,7 +415,7 @@ export default function LogTerminalPage() {
           style={{ scrollbarWidth: "thin", scrollbarColor: "#374151 #111827" }}
         >
           {rawMessages.length === 0 && (
-            <div className="py-4 text-xs text-gray-600 text-center">
+            <div className="py-4 text-sm text-gray-600 text-center">
               {connected ? "Waiting for telemetry..." : "Not connected"}
             </div>
           )}

@@ -162,7 +162,6 @@ export type EditorAction =
   | { type: "CLEAR_SCREEN" }
   | { type: "ADD_SCREEN" }
   | { type: "REMOVE_SCREEN"; payload: { id: string } }
-  | { type: "REMOVE_SCREENS_BY_IDS"; payload: { ids: string[] } }
   | { type: "REMOVE_SCREEN_BY_NAME"; payload: { name: string } }
   | { type: "CLEAR_SCREENS_BY_IDS"; payload: { ids: string[] } }
   | { type: "UPSERT_SCREEN"; payload: { name: string; widgets: PlacedWidget[] } }

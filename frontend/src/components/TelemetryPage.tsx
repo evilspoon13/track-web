@@ -202,7 +202,7 @@ export default function TelemetryPage() {
       </div>
       <div className="flex-1 overflow-hidden p-3">
         {n === 0 ? (
-          <div className="flex h-full items-center justify-center text-[10px] text-gray-600">
+          <div className="flex h-full items-center justify-center text-sm text-gray-500">
             Waiting for telemetry...
           </div>
         ) : (

@@ -214,7 +214,7 @@ function MapCanvas({ laps, allPoints }: { laps: VisibleLap[]; allPoints: ProjPoi
     >
       {allPoints.length === 0 ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-sm text-gray-600">Waiting for fix…</span>
+          <span className="text-sm text-gray-600">Waiting for GPS</span>
         </div>
       ) : (
         <svg
@@ -343,7 +343,7 @@ function OverlayCard({ latest }: { latest: GpsPoint | null }) {
   if (!latest) {
     return (
       <div className="flex items-center justify-center rounded-xl border border-gray-700 bg-gray-900 px-6 py-4 shadow-2xl">
-        <span className="text-sm text-gray-500">Waiting for fix…</span>
+        <span className="text-sm text-gray-500">Waiting for GPS</span>
       </div>
     );
   }

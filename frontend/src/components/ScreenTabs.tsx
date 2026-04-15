@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Trash2, Pin, Check } from "lucide-react";
+import { Trash2, Pin } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -63,18 +63,7 @@ export default function ScreenTabs() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [error, setError] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showBulkDelete, setShowBulkDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const toggleSelected = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -158,39 +147,6 @@ export default function ScreenTabs() {
   const sortableUnpinned = unpinned.filter((s) => !!s.originalName);
   const drafts = unpinned.filter((s) => !s.originalName);
 
-  // Only saved + unpinned screens are selectable for bulk actions.
-  const selectableIds = sortableUnpinned.map((s) => s.id);
-  const allSelectableSelected =
-    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
-  const effectiveSelected = Array.from(selectedIds).filter((id) =>
-    selectableIds.includes(id)
-  );
-
-  const toggleSelectAll = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allSelectableSelected) {
-        for (const id of selectableIds) next.delete(id);
-      } else {
-        for (const id of selectableIds) next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const confirmBulkDelete = async () => {
-    setShowBulkDelete(false);
-    const ids = effectiveSelected;
-    const screensToDelete = state.screens.filter((s) => ids.includes(s.id));
-    const names = screensToDelete
-      .map((s) => s.originalName)
-      .filter((n): n is string => typeof n === "string");
-    await Promise.all(names.map((n) => deleteScreen(n).catch(() => undefined)));
-    dispatch({ type: "REMOVE_SCREENS_BY_IDS", payload: { ids } });
-    setSelectedIds(new Set());
-  };
-
-
   const handleTabDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -206,42 +162,6 @@ export default function ScreenTabs() {
 
   return (
     <>
-      {/* Bulk selection header + actions */}
-      {selectableIds.length > 0 && (
-        <div className="flex items-center justify-between">
-          <label className="flex cursor-pointer items-center gap-2">
-            <span
-              onClick={toggleSelectAll}
-              role="checkbox"
-              aria-checked={allSelectableSelected}
-              tabIndex={0}
-              className={`flex h-4 w-4 items-center justify-center rounded border transition-colors ${
-                allSelectableSelected
-                  ? "border-teal-500 bg-teal-600"
-                  : "border-gray-600 bg-gray-800 hover:border-gray-500"
-              }`}
-            >
-              {allSelectableSelected && <Check className="h-3 w-3 text-white" />}
-            </span>
-            <span className="text-[11px] text-gray-500">
-              {effectiveSelected.length > 0
-                ? `${effectiveSelected.length} selected`
-                : "Select all"}
-            </span>
-          </label>
-          {effectiveSelected.length > 0 && (
-            <button
-              onClick={() => setShowBulkDelete(true)}
-              title={`Delete ${effectiveSelected.length} screen(s)`}
-              aria-label="Delete selected"
-              className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-700 hover:text-red-400"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
       {pinned.map((screen) => (
         <TabRow
           key={screen.id}
@@ -275,8 +195,6 @@ export default function ScreenTabs() {
               isActive={screen.id === state.activeScreenId}
               isEditing={editingId === screen.id}
               isPinned={false}
-              selectable={true}
-              selected={selectedIds.has(screen.id)}
               screensCount={state.screens.length}
               editValue={editValue}
               error={error}
@@ -291,7 +209,6 @@ export default function ScreenTabs() {
                 if (!screen.originalName) return;
                 dispatch({ type: "TOGGLE_PIN_SCREEN", payload: { name: screen.originalName } });
               }}
-              onSelectClick={() => toggleSelected(screen.id)}
             />
           ))}
         </SortableContext>
@@ -324,34 +241,6 @@ export default function ScreenTabs() {
       >
         + New Screen
       </button>
-
-      {showBulkDelete && (
-        <div className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="anim-modal mx-4 w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-8 shadow-2xl">
-            <h2 className="mb-4 text-xl font-bold text-white">
-              Delete {effectiveSelected.length} Screen{effectiveSelected.length === 1 ? "" : "s"}?
-            </h2>
-            <p className="mb-8 text-gray-300">
-              This will permanently delete {effectiveSelected.length === 1 ? "this screen" : `these ${effectiveSelected.length} screens`} and all their widgets.
-            </p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setShowBulkDelete(false)}
-                className="flex-1 rounded bg-gray-700 px-6 py-4 text-lg font-medium text-white hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmBulkDelete}
-                className="flex-1 rounded bg-red-600 px-6 py-4 text-lg font-medium text-white hover:bg-red-500"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </>
   );
 }
@@ -365,8 +254,6 @@ interface TabRowProps {
   editValue: string;
   error: string;
   inputRef?: React.RefObject<HTMLInputElement>;
-  selectable?: boolean;
-  selected?: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
   onEditChange: (v: string) => void;
@@ -374,7 +261,6 @@ interface TabRowProps {
   onEditKeyDown: (e: React.KeyboardEvent) => void;
   onTrashClick: () => void;
   onPinClick: () => void;
-  onSelectClick?: () => void;
 }
 
 function SortableTabRow(props: TabRowProps) {
@@ -416,8 +302,6 @@ function TabRow({
   editValue,
   error,
   inputRef,
-  selectable,
-  selected,
   onClick,
   onDoubleClick,
   onEditChange,
@@ -425,7 +309,6 @@ function TabRow({
   onEditKeyDown,
   onTrashClick,
   onPinClick,
-  onSelectClick,
 }: TabRowProps) {
   if (isEditing) {
     return (
@@ -462,23 +345,6 @@ function TabRow({
         isActive ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"
       }`}
     >
-      {selectable && (
-        <span
-          onClick={(e) => { e.stopPropagation(); onSelectClick?.(); }}
-          onPointerDown={(e) => e.stopPropagation()}
-          role="checkbox"
-          aria-checked={!!selected}
-          tabIndex={0}
-          className={`mr-2 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
-            selected
-              ? "border-teal-500 bg-teal-600"
-              : "border-gray-500 bg-gray-800 hover:border-gray-400"
-          }`}
-          title={selected ? "Deselect" : "Select"}
-        >
-          {selected && <Check className="h-3 w-3 text-white" />}
-        </span>
-      )}
       <span className="flex items-center flex-1 truncate">
         <span className={screen.originalName ? "" : "italic"}>{screen.name}</span>
         {!screen.originalName && (

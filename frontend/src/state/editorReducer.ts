@@ -213,48 +213,6 @@ export function editorReducer(
       };
     }
 
-    case "REMOVE_SCREENS_BY_IDS": {
-      const ids = new Set(action.payload.ids);
-      if (ids.size === 0) return state;
-      const removed = state.screens.filter((s) => ids.has(s.id));
-      const remaining = state.screens.filter((s) => !ids.has(s.id));
-      let pinned = state.pinnedScreenNames;
-      let order = state.screenOrder;
-      let changed = false;
-      for (const s of removed) {
-        if (!s.originalName) continue;
-        const r = prefsWithoutName(pinned, order, s.originalName);
-        pinned = r.pinned;
-        order = r.order;
-        changed = changed || r.changed;
-      }
-      if (remaining.length === 0) {
-        const id = uuidv4();
-        const fresh = { id, name: nextDefaultScreenName([]), widgets: [] };
-        return {
-          ...state,
-          screens: [fresh],
-          activeScreenId: id,
-          selectedWidgetId: null,
-          pinnedScreenNames: pinned,
-          screenOrder: order,
-          prefsDirty: changed || state.prefsDirty,
-        };
-      }
-      const nextActiveId = ids.has(state.activeScreenId)
-        ? remaining[0]!.id
-        : state.activeScreenId;
-      return {
-        ...state,
-        screens: remaining,
-        activeScreenId: nextActiveId,
-        selectedWidgetId: null,
-        pinnedScreenNames: pinned,
-        screenOrder: order,
-        prefsDirty: changed || state.prefsDirty,
-      };
-    }
-
     case "CLEAR_SCREENS_BY_IDS": {
       const ids = new Set(action.payload.ids);
       if (ids.size === 0) return state;
