@@ -381,9 +381,19 @@ export function handlePiMessage(socket: WebSocket, data: RawData, registeredPiId
   return activePiId;
 }
 
-function toHexCanId(n: unknown): string {
-  if (typeof n !== "number" || !Number.isFinite(n)) return "0x0";
-  return "0x" + Math.floor(n).toString(16);
+function normalizeHexCanId(v: unknown): unknown {
+  if (typeof v === "number" && Number.isFinite(v)) return "0x" + Math.floor(v).toString(16);
+  if (typeof v !== "string") return v;
+
+  const s = v.trim();
+  if (!s.length) return v;
+
+  const hex = s.startsWith("0x") || s.startsWith("0X") ? s.slice(2) : s;
+  if (!/^[0-9a-fA-F]+$/.test(hex)) return v;
+
+  const n = parseInt(hex, 16);
+  if (!Number.isFinite(n)) return v;
+  return "0x" + n.toString(16);
 }
 
 function normalizeConfigForPi(config: unknown): unknown {
@@ -396,15 +406,23 @@ function normalizeConfigForPi(config: unknown): unknown {
     screens: c.screens.map((s) => ({
       ...s,
       widgets: (s.widgets ?? []).map((w) => {
-        const data = w.data as { can_id?: unknown } | undefined;
-        const graph = w.graph as { x_can_id?: unknown } | undefined;
+        const data = (w as { data?: unknown }).data;
+        const graph = (w as { graph?: unknown }).graph;
+
+        const nextData =
+          data && typeof data === "object" && "can_id" in (data as Record<string, unknown>)
+            ? { ...(data as Record<string, unknown>), can_id: normalizeHexCanId((data as { can_id?: unknown }).can_id) }
+            : data;
+
+        const nextGraph =
+          graph && typeof graph === "object" && "x_can_id" in (graph as Record<string, unknown>)
+            ? { ...(graph as Record<string, unknown>), x_can_id: normalizeHexCanId((graph as { x_can_id?: unknown }).x_can_id) }
+            : graph;
+
         return {
           ...w,
-          data: data ? { ...data, can_id: toHexCanId(data.can_id) } : data,
-          graph:
-            graph && typeof graph.x_can_id === "number"
-              ? { ...graph, x_can_id: toHexCanId(graph.x_can_id) }
-              : graph,
+          data: nextData,
+          graph: nextGraph,
         };
       }),
     })),
