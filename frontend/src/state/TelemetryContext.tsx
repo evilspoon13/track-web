@@ -43,6 +43,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
   const rawBufRef = useRef<LiveLogLine[]>([]);
   const flushTimerRef = useRef<number | null>(null);
   const latestGpsRef = useRef<GpsPoint | null>(null);
+  const lastGpsReceivedAtRef = useRef<number>(0);
   const lowSpeedSinceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
         setLatestGps(null);
         lowSpeedSinceRef.current = null;
       };
-      if (now - latest.ts > GPS_NO_FRAME_TIMEOUT_MS) {
+      if (now - lastGpsReceivedAtRef.current > GPS_NO_FRAME_TIMEOUT_MS) {
         endSession();
         return;
       }
@@ -163,7 +164,11 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
 
           if (type === "gps") {
             const payload = msg.payload as GpsPoint | undefined;
-            if (!payload) return;
+            if (!payload) {
+              console.warn("[gps] frame missing payload, dropped", msg);
+              return;
+            }
+            const now = Date.now();
             const point: GpsPoint = {
               lat: Number(payload.lat),
               lon: Number(payload.lon),
@@ -171,8 +176,14 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
               heading: Number(payload.heading),
               ts: Number(payload.ts),
               gps_ts: Number(payload.gps_ts),
+              receivedAt: now,
             };
+            if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) {
+              console.warn("[gps] invalid lat/lon, dropped", payload);
+              return;
+            }
             setLatestGps(point);
+            lastGpsReceivedAtRef.current = Date.now();
             setGpsSession((prev) => [...prev, point]);
             return;
           }

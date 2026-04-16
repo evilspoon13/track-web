@@ -84,7 +84,7 @@ export default function MapPage() {
       if (!isCurrent && nextBoundary !== undefined) {
         const first = gpsSession[startIdx];
         const last = gpsSession[nextBoundary];
-        if (first && last) durationMs = last.ts - first.ts;
+        if (first && last) durationMs = last.receivedAt - first.receivedAt;
       }
       visible.push({ points, colorIndex, durationMs });
     }
@@ -92,7 +92,7 @@ export default function MapPage() {
     const currentStartGps = gpsSession[boundaries[numCompleted]!];
     return {
       visibleLaps: visible,
-      currentLapStartTs: currentStartGps ? currentStartGps.ts : 0,
+      currentLapStartTs: currentStartGps ? currentStartGps.receivedAt : 0,
     };
   }, [gpsSession, projectedPoints]);
 
@@ -334,7 +334,7 @@ function OverlayCard({ latest }: { latest: GpsPoint | null }) {
 
   useEffect(() => {
     if (!latest) return;
-    const update = () => setFixAge(Math.floor((Date.now() - latest.ts) / 1000));
+    const update = () => setFixAge(Math.floor((Date.now() - latest.receivedAt) / 1000));
     update();
     const interval = window.setInterval(update, 1000);
     return () => window.clearInterval(interval);

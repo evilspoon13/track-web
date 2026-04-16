@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { Trash2, Pin } from "lucide-react";
 import {
   DndContext,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -66,7 +67,8 @@ export default function ScreenTabs() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 10 } })
   );
 
   useEffect(() => {

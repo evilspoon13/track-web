@@ -10,6 +10,10 @@
   display: none;
 }
 
+html, body {
+  overscroll-behavior: none;
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;

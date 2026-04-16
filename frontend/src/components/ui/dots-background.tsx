@@ -88,9 +88,20 @@ export default function DotsBackground({
     const onLeave = () => {
       mouseRef.current = { x: -9999, y: -9999 };
     };
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) mouseRef.current = { x: t.clientX, y: t.clientY };
+    };
+    const onTouchEnd = () => {
+      mouseRef.current = { x: -9999, y: -9999 };
+    };
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseleave", onLeave);
+    window.addEventListener("touchstart", onTouchMove, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("touchcancel", onTouchEnd);
 
     rafRef.current = requestAnimationFrame(draw);
 
@@ -98,6 +109,10 @@ export default function DotsBackground({
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("touchstart", onTouchMove);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [draw]);
