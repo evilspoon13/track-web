@@ -331,10 +331,12 @@ function LapBoard({ laps, currentLapStartTs }: { laps: VisibleLap[]; currentLapS
 
 function OverlayCard({ latest }: { latest: GpsPoint | null }) {
   const [fixAge, setFixAge] = useState(0);
+  const receivedAtRef = useRef(0);
 
   useEffect(() => {
     if (!latest) return;
-    const update = () => setFixAge(Math.floor((Date.now() - latest.ts) / 1000));
+    receivedAtRef.current = Date.now();
+    const update = () => setFixAge(Math.floor((Date.now() - receivedAtRef.current) / 1000));
     update();
     const interval = window.setInterval(update, 1000);
     return () => window.clearInterval(interval);

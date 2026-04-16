@@ -21,6 +21,7 @@ const WebSocket = require("ws");
 const BACKEND_WS = process.env.BACKEND_WS || "ws://localhost:3000/ws/pi";
 const DEVICE_ID = process.env.DEVICE_ID || "dev-001";
 const DEVICE_SECRET = process.env.DEVICE_SECRET || "test";
+const PI_CLOCK_OFFSET_MS = Number(process.env.PI_CLOCK_OFFSET_S ?? 0) * 1000;
 const GPS_INTERVAL_MS = 100;        // 1 Hz — matches cloud-bridge
 const HEARTBEAT_INTERVAL_MS = 1000;
 
@@ -203,6 +204,9 @@ ws.on("open", () => {
   console.log(
     `Simulating Monaco-style circuit: origin=(${ORIGIN_LAT}, ${ORIGIN_LON}) extent=${TRACK_EXTENT_M}m lap=${LAP_SECONDS}s`
   );
+  if (PI_CLOCK_OFFSET_MS !== 0) {
+    console.log(`Pi clock offset: ${PI_CLOCK_OFFSET_MS / 1000}s (simulating desynced RTC)`);
+  }
   console.log(`Streaming at ${1000 / GPS_INTERVAL_MS} Hz. Ctrl+C to stop.\n`);
 
   ws.send(JSON.stringify({ type: "heartbeat", device_id: DEVICE_ID }));
@@ -210,15 +214,16 @@ ws.on("open", () => {
   gpsInterval = setInterval(() => {
     const fix = generateGps();
     const now = Date.now();
+    const piNow = now + PI_CLOCK_OFFSET_MS;
     const msg = {
       type: "gps",
       device_id: DEVICE_ID,
-      ts: now,
+      ts: piNow,
       lat: fix.lat,
       lon: fix.lon,
       speed_kmh: fix.speed_kmh,
       heading: fix.heading,
-      gps_ts: now,
+      gps_ts: piNow,
     };
     ws.send(JSON.stringify(msg));
     console.log(

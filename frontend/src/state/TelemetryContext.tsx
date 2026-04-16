@@ -43,6 +43,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
   const rawBufRef = useRef<LiveLogLine[]>([]);
   const flushTimerRef = useRef<number | null>(null);
   const latestGpsRef = useRef<GpsPoint | null>(null);
+  const lastGpsReceivedAtRef = useRef<number>(0);
   const lowSpeedSinceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
         setLatestGps(null);
         lowSpeedSinceRef.current = null;
       };
-      if (now - latest.ts > GPS_NO_FRAME_TIMEOUT_MS) {
+      if (now - lastGpsReceivedAtRef.current > GPS_NO_FRAME_TIMEOUT_MS) {
         endSession();
         return;
       }
@@ -180,6 +181,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
               return;
             }
             setLatestGps(point);
+            lastGpsReceivedAtRef.current = Date.now();
             setGpsSession((prev) => [...prev, point]);
             return;
           }
