@@ -111,7 +111,7 @@ export default function ConfigPanel() {
               </div>
             </div>
 
-            {/* Unit + Size + Alarm — stacks Alarm below on small screens */}
+            {/* Unit + Size */}
             <div className="mb-3 grid grid-cols-2 items-start gap-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-400">Unit</label>
@@ -127,46 +127,29 @@ export default function ConfigPanel() {
                   className={numberInputClass}
                 />
               </div>
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <label className="mb-1 block text-xs font-medium text-gray-400">Size</label>
-                  <AnimatedSelect
-                    value={`${widget.cols}x${widget.rows}`}
-                    onChange={(v) => {
-                      const [c, r] = v.split("x").map(Number);
-                      handleResize(c!, r!);
-                    }}
-                    options={sizes
-                      .filter((s) => {
-                        const isCurrent = s.cols === widget.cols && s.rows === widget.rows;
-                        return isCurrent || !hasCollision(widget.col, widget.row, s.cols, s.rows, screen!.widgets, widget.id);
-                      })
-                      .map((s) => ({
-                        value: `${s.cols}x${s.rows}`,
-                        label: `${s.cols} \u00d7 ${s.rows}`,
-                      }))}
-                  />
-                </div>
-                <div className="hidden flex-shrink-0 flex-col items-center gap-1.5 lg:flex">
-                  <span className="text-xs text-gray-500">Alarm</span>
-                  <button
-                    role="switch"
-                    aria-checked={widget.alarm ?? false}
-                    onClick={() => handleWidgetData({ alarm: !(widget.alarm ?? false) })}
-                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
-                      widget.alarm ? "bg-orange-500" : "bg-gray-600"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${
-                        widget.alarm ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Size</label>
+                <AnimatedSelect
+                  value={`${widget.cols}x${widget.rows}`}
+                  onChange={(v) => {
+                    const [c, r] = v.split("x").map(Number);
+                    handleResize(c!, r!);
+                  }}
+                  options={sizes
+                    .filter((s) => {
+                      const isCurrent = s.cols === widget.cols && s.rows === widget.rows;
+                      return isCurrent || !hasCollision(widget.col, widget.row, s.cols, s.rows, screen!.widgets, widget.id);
+                    })
+                    .map((s) => ({
+                      value: `${s.cols}x${s.rows}`,
+                      label: `${s.cols} \u00d7 ${s.rows}`,
+                    }))}
+                />
               </div>
             </div>
-            <div className="mb-3 flex items-center gap-3 lg:hidden">
+
+            {/* Alarm */}
+            <div className="mb-3 flex items-center gap-3">
               <span className="text-xs text-gray-500">Alarm</span>
               <button
                 role="switch"
