@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
-import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, MouseSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { v4 as uuidv4 } from "uuid";
 import { LogOut } from "lucide-react";
 import { auth } from "./lib/firebase";
@@ -96,7 +96,8 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
   const widgets = screen?.widgets ?? [];
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {

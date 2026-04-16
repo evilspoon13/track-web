@@ -78,7 +78,7 @@ export default function PlacedWidget({ widget, cellWidth, cellHeight }: Props) {
         e.stopPropagation();
         dispatch({ type: "SELECT_WIDGET", payload: { id: widget.id } });
       }}
-      className={`flex cursor-grab flex-col items-center justify-center overflow-hidden rounded border-2 text-xs font-semibold select-none ${
+      className={`flex cursor-grab flex-col items-center justify-center overflow-hidden rounded border-2 text-xs font-semibold select-none touch-none ${
         typeColors[widget.type] ?? "border-gray-400 bg-gray-800"
       } ${isSelected ? "ring-2 ring-white" : ""} ${!widget.widgetSignal ? "border-dashed opacity-60" : ""}`}
     >
