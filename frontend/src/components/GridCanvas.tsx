@@ -31,6 +31,10 @@ export default function GridCanvas({ cellWidth, cellHeight }: Props) {
       swipeRef.current = { startX: e.touches[0]!.clientX, startY: e.touches[0]!.clientY };
     };
 
+    const onTouchMove = (e: globalThis.TouchEvent) => {
+      e.preventDefault();
+    };
+
     const onTouchEnd = (e: globalThis.TouchEvent) => {
       if (!swipeRef.current) return;
       const touch = e.changedTouches[0];
@@ -52,9 +56,11 @@ export default function GridCanvas({ cellWidth, cellHeight }: Props) {
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
   }, [state.screens, state.activeScreenId, dispatch]);
