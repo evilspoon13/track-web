@@ -389,7 +389,10 @@ export default function CanIdConfigurator() {
                         ? `Byte Map — click to assign to ${frame.signals[activeSignal!.signalIdx]?.name ?? "signal"}`
                         : "Byte Map"}
                     </span>
-                    <div className="flex gap-1 overflow-x-auto pb-1">
+                    <div
+                      className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:!block [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-600"
+                      style={{ scrollbarWidth: "thin", scrollbarColor: "#4b5563 transparent" }}
+                    >
                       {Array.from({ length: 8 }, (_, i) => {
                         const ownerIdx = ownership[i]!;
                         const isOwnedByActive =

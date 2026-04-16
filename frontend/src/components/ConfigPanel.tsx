@@ -142,7 +142,7 @@ export default function ConfigPanel() {
                     })
                     .map((s) => ({
                       value: `${s.cols}x${s.rows}`,
-                      label: `${s.cols} \u00d7 ${s.rows}`,
+                      label: `${s.cols}\u00d7${s.rows}`,
                     }))}
                 />
               </div>
