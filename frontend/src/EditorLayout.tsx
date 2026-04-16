@@ -97,7 +97,7 @@ export default function EditorLayout({ onLogout }: EditorLayoutProps) {
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 10 } })
+    useSensor(TouchSensor, { activationConstraint: { distance: 8 } })
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
