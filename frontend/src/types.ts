@@ -134,8 +134,9 @@ export interface GpsPoint {
   lon: number;
   speed_kmh: number;
   heading: number;
-  ts: number;       // backend-attached (Pi time)
-  gps_ts: number;   // GPS hardware timestamp
+  ts: number;          // backend-attached (Pi time)
+  gps_ts: number;      // GPS hardware timestamp
+  receivedAt: number;  // browser Date.now() at receipt
 }
 
 export type EditorAction =
