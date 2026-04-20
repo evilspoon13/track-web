@@ -1,6 +1,6 @@
 # T.R.A.C.K. Frontend Documentation
 
-T.R.A.C.K. (Telemetry Rendering And Capture Kit) is the FSAE Electric team's race-day telemetry system. This documentation covers `track-web/frontend` — a React drag-and-drop dashboard configurator that lets engineers build widget layouts for the on-car display, view live telemetry signals over WebSocket, browse and export historical log data, and manage device team-member access.
+T.R.A.C.K. (Telemetry Rendering And Capture Kit) is the FSAE Electric team's race-day telemetry system. This documentation covers `track-web/frontend` — a React drag-and-drop dashboard configurator that lets engineers build widget layouts for the on-car display, view live telemetry signals over WebSocket, plot GPS fixes against the track, browse and export historical log data, and manage device team-member access.
 
 ## Documents
 
@@ -36,7 +36,7 @@ Set `VITE_AUTH_ENABLED=false` in `.env.local` to bypass Firebase auth during loc
                          [graphics-engine → HDMI]
 ```
 
-The frontend saves screen configs and CAN frame definitions through the backend, which persists them to Firestore and commits them to the versioned sync store. The Pi pulls configs on reconnect via the sync protocol over `/ws/pi` and reloads its graphics-engine. Backend-originated writes also broadcast to every open browser tab on the same user account (`/ws/client`) so all tabs stay in sync without reloading.
+The frontend saves screen configs and CAN frame definitions through the backend, which persists them to Firestore. On each screen save, the backend pushes the full rebuilt screen set to the Pi as a fire-and-forget `config_update` over `/ws/pi`; the Pi's cloud-bridge writes the local config files and SIGHUPs `graphics-engine`. Backend-originated writes also broadcast to every open browser tab on the same user account (`/ws/client`) so all tabs stay in sync without reloading.
 
 ## Deployment
 

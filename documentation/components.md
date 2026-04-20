@@ -6,7 +6,7 @@ The editor UI is built from a small set of stateful components. Each entry below
 
 ## EditorLayout
 
-**Purpose:** Top-level shell for the authenticated app. Owns the drag-and-drop context, the page switcher (`display` | `telemetry` | `logs` | `device`), the header (logo, tab strip with animated underline, connection dot, user menu), and cell-size computation for the grid.
+**Purpose:** Top-level shell for the authenticated app. Owns the drag-and-drop context, the page switcher (`display` | `telemetry` | `map` | `logs` | `device`), the header (logo, tab strip with animated underline, connection dot, user menu), and cell-size computation for the grid.
 
 **Location:** `src/EditorLayout.tsx`
 
@@ -16,7 +16,7 @@ The editor UI is built from a small set of stateful components. Each entry below
 - `connected` (from `useTelemetry`) — to render the header connection dot
 
 **Local state:**
-- `page` — current view (`"display"` | `"telemetry"` | `"logs"` | `"device"`)
+- `page` — current view (`"display"` | `"telemetry"` | `"map"` | `"logs"` | `"device"`)
 - `cellSize` — computed `{ w, h }` of each grid cell, recalculated on window resize
 - `activeType` / `activeWidgetId` — currently dragged palette type or existing widget ID
 - `settingsOpen` — user menu dropdown state
@@ -178,6 +178,25 @@ The editor UI is built from a small set of stateful components. Each entry below
 
 **Notes:**
 - The TelemetryContext WebSocket is shared with `LogTerminalPage` — `TelemetryPage` does not open its own socket.
+
+---
+
+## MapPage
+
+**Purpose:** GPS Mapping page. Projects incoming GPS fixes to a local metric plane (equirectangular around the session origin) and plots the live track as a set of per-lap polylines. Detects lap boundaries by watching for the trace returning close to the session origin after having travelled away, and colors up to four most recent laps from current (green) to oldest (red).
+
+**Location:** `src/components/MapPage.tsx`
+
+**State consumed:**
+- `gpsSession`, `latestGps` (from `useTelemetry`) — current session's accumulated fixes and most recent point.
+
+**Local state / computation:**
+- Memoized `projectedPoints`, `visibleLaps`, `currentLapStartTs` derived from `gpsSession`.
+- ViewBox auto-fits to the projected points.
+
+**Notes:**
+- The GPS session lives in `TelemetryContext` — it is cleared after 30 s without a GPS frame, or after 60 s below 1 km/h, so a fresh session starts automatically on the next drive.
+- `MapPage` does not open its own socket; it reads through `useTelemetry()`.
 
 ---
 

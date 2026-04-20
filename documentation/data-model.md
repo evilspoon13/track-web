@@ -1,6 +1,6 @@
 # Data Model — Firestore Schema
 
-All persistent data lives in Firebase Firestore. There are two top-level collections (`users`, `devices`). User-scoped data (prefs) sits under `users/{uid}`; device-scoped data (screens, DBC, logs, sync files) sits under `devices/{deviceId}`.
+All persistent data lives in Firebase Firestore. There are two top-level collections (`users`, `devices`). User-scoped data (prefs) sits under `users/{uid}`; device-scoped data (screens, DBC, logs) sits under `devices/{deviceId}`.
 
 ## ER Diagram
 
@@ -49,16 +49,6 @@ erDiagram
         Timestamp createdAt
     }
 
-    FILE_STATE {
-        string file_id PK
-        number version_id
-        string content_b64
-        string modified_by "cloud|pi"
-        number modified_at_ms
-        string change_id
-        number content_size
-    }
-
     WIDGET_INFO {
         string type "gauge|bar|number|indicator|graph"
         boolean alarm
@@ -78,7 +68,6 @@ erDiagram
     DEVICE ||--o{ SCREEN : "screens subcollection"
     DEVICE ||--|| DBC_CONTENT : "dbc/content"
     DEVICE ||--o{ LOG_CHUNK : "logs subcollection"
-    DEVICE ||--o{ FILE_STATE : "files subcollection"
     SCREEN ||--|{ WIDGET_INFO : "widgets array"
     LOG_CHUNK ||--|{ LOG_CHUNK_ENTRY : "entries array"
 ```
@@ -124,15 +113,6 @@ devices/
       - count: number
       - entries: LogChunkEntry[]
       - createdAt: Timestamp
-
-    files/{fileId}                   # versioned sync store; fileId in { graphics, display_dbc }
-      - file_id: string
-      - version_id: number
-      - content_b64: string
-      - modified_by: "cloud" | "pi"
-      - modified_at_ms: number
-      - change_id: string
-      - content_size: number
 ```
 
 ---
@@ -309,27 +289,9 @@ Binary wire format from Pi: 24 bytes per entry (`int64 ts` + `uint32 can_id` + `
 
 ---
 
-### `files/{fileId}`
-
-Versioned snapshot store for the cloud ↔ Pi sync protocol. `fileId` is one of the sync service constants (`graphics`, `display_dbc`). Every save to `screens/` or `dbc/content` also writes a new revision here so the Pi can fast-forward on reconnect.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `file_id` | string | Logical file identifier |
-| `version_id` | number | Monotonic revision number |
-| `content_b64` | string | File payload, base64-encoded |
-| `modified_by` | `"cloud"` \| `"pi"` | Which side wrote this revision |
-| `modified_at_ms` | number | Wall-clock time of commit (ms) |
-| `change_id` | string | Idempotency key (UUID) — repeated `commit` calls with the same id return the same revision |
-| `content_size` | number | Payload byte length |
-
-**Source:** `backend/src/modules/sync/sync.service.ts`, `backend/src/modules/sync/sync.types.ts`.
-
----
-
 ## Notes
 
 - All `updatedAt` / `createdAt` fields use `FieldValue.serverTimestamp()`.
-- Every screen write is followed by a `commitCloudGeneratedGraphics(deviceId, payload)` call that rebuilds the full screen set and commits it to `files/graphics`; the resulting `sync_download` message is what actually reaches the Pi.
+- Every screen write is followed by a `pushFullConfigToPi(deviceId)` call that rebuilds the full screen set and sends `{ type: "config_update", payload }` over `/ws/pi`. Fire-and-forget — no ack, no persistence of what was sent, no replay on Pi reconnect. If the Pi is offline when a save lands, the next save will carry the cumulative state.
 - The `users/{uid}` doc is written in two places: the frontend writes `email` / `displayName` / `createdAt` on sign-in; the backend writes `device_id` when the user is linked to a device (either via `registerDevice` or resolved at WSS auth).
 - Backend broadcasts after every write: `screen_updated` / `screen_deleted` go to all `/ws/client` sockets matching the same `deviceId`; `screen_prefs_updated` goes to all sockets matching the same `uid`.

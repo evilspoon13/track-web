@@ -2,8 +2,8 @@
 
 The backend runs one `ws` WebSocket server attached to the Express HTTP server. Connections are routed by request path:
 
-- `/ws/pi` — Pi ↔ backend (telemetry, heartbeat, log upload, sync protocol)
-- `/ws/client` — browser ↔ backend (live telemetry fan-out, cross-tab editor events)
+- `/ws/pi` — Pi ↔ backend (heartbeat, telemetry, GPS, binary log upload, Pi-initiated graphics / dbc uploads, cloud config pushes)
+- `/ws/client` — browser ↔ backend (live telemetry / GPS fan-out, cross-tab editor events)
 
 Connection management lives in `realtime.service.ts`. Path routing and lifecycle hooks live in `realtime.gateway.ts`.
 
@@ -32,33 +32,33 @@ activeSessions: Map<filename, UploadSession>     // in-flight log uploads
 - `x-device-id: <deviceId>`
 - `x-device-secret: <DEVICE_SECRET>` (matched against `process.env.DEVICE_SECRET`; skipped if the env var is empty — local dev)
 
-Missing / wrong headers → server closes with `1008 Unauthorized` before any message is processed.
+Missing / wrong headers → server closes with `1008 Unauthorized` before any message is processed. The `deviceId` header is used purely as a gate — the Pi still has to echo `device_id` in its first `heartbeat` for the socket to be registered in the `piSockets` map.
 
 ### Messages from Pi → server
 
-Every inbound JSON message may include a `device_id` field. The first `heartbeat` or `sync_state` for a socket registers the Pi into `piSockets` under that ID.
+Every inbound JSON message may include a `device_id` field. The first `heartbeat` with a non-empty `device_id` registers the Pi into `piSockets` under that ID (and updates `devices/{deviceId}` to `connected: true`). Subsequent telemetry / GPS / upload messages inherit that registered ID.
 
 | `type` | Purpose |
 |---|---|
-| `heartbeat` | Marks the Pi alive; triggers `registerDeviceHeartbeat(deviceId, hostname?)` which updates `devices/{deviceId}.lastSeen` + `connected: true` |
-| `sync_state` | Pi's view of its own file revisions; server plans a `sync_download`, `request_upload`, or `noop` per file |
-| `telemetry` | `{ payload: { signals: Record<name, number> } }` — fanned out to matching `/ws/client` sockets |
-| `sync_upload` | Pi is about to overwrite a cloud file (user edited on the Pi); server validates + commits |
+| `heartbeat` | Marks the Pi alive; triggers `registerDeviceHeartbeat(deviceId)` which updates `devices/{deviceId}.lastSeen` + `connected: true`. First heartbeat also registers the socket into `piSockets`. |
+| `telemetry` | `{ payload: { signals: Record<name, number> } }` — fanned out to matching `/ws/client` sockets as `{ type: "Telemetry", device_id, payload }` |
+| `gps` | `{ payload: { lat, lon, ... } }` — validated for finite `lat`/`lon` (warn + drop otherwise), fanned out to matching `/ws/client` sockets as `{ type: "gps", device_id, payload }` |
+| `graphics_upload` | `{ payload: { screens: [...] } }` — replaces the full screen set for this device (`graphicsService.replaceAllScreensFromPi`) and re-emits one `screen_updated` per kept screen + one `screen_deleted` per removed screen on `/ws/client` |
+| `dbc_upload` | `{ payload: "<raw .dbc text>" }` — stored via `dbcService.uploadDbc` |
 | `log_upload_start` / `log_upload_chunk` / `log_upload_end` | Binary log upload (base64-encoded chunks); assembled + persisted via `persistLogBuffer` |
 
 ### Messages from server → Pi
 
-Envelope: every message sent to the Pi is prefixed with `{ device_id, ...message }`.
+Envelope: every message sent via `sendMessageToPi` is prefixed with `{ device_id, ...message }`.
 
 | `type` | When |
 |---|---|
-| `sync_plan` | Replies to `sync_state` — tells the Pi what to do per file (`noop`, `request_upload`, `send_download`) |
-| `sync_download` | Delivers cloud content with its `version_id`; Pi adopts the revision |
-| `sync_commit` | Acknowledges a `sync_upload` — returns the new cloud `version_id` |
-| `sync_reject` | Pi's upload rejected (`invalid_json`, `invalid_dbc`, `base_rev_mismatch`) |
-| `config_update` | Fallback push — used when cloud-side code directly wants the Pi to reload (delegates through the sync path in the current codebase) |
+| `config_update` | Sent by `sendConfigToPi` after every graphics upsert (`POST /api/graphics/screens/:id`). Payload is the full normalized `{ screens }` set with hex-encoded `can_id` / `x_can_id` fields. |
+| `team_members_update` | Sent after `POST /api/device/team-members`. Payload is `{ team_members: string[] }`. |
 
-See [sync-protocol.md](sync-protocol.md) for the full sync state machine.
+There is **no** `sync_state` / `sync_plan` / `sync_download` / `sync_upload` / `sync_commit` / `sync_reject` message type, and no versioned file store. The config push is fire-and-forget — if the Pi isn't currently connected, `sendMessageToPi` returns `false` and the change is not replayed on reconnect.
+
+See [sync-protocol.md](sync-protocol.md) for the (short) cloud ↔ Pi config exchange.
 
 ---
 
@@ -83,8 +83,9 @@ Every event is plain JSON.
 | `type` | Match criterion | Fields | Emitted by |
 |---|---|---|---|
 | `Telemetry` | `deviceId` | `{ type, device_id, payload: { signals } }` | Forwarded from Pi telemetry |
-| `screen_updated` | `deviceId` | `{ type, name, screen: ScreenInfo }` | `graphics.controller.updateScreen` |
-| `screen_deleted` | `deviceId` | `{ type, name }` | `graphics.controller.deleteScreenById` |
+| `gps` | `deviceId` | `{ type, device_id, payload: { lat, lon, ... } }` | Forwarded from Pi GPS |
+| `screen_updated` | `deviceId` | `{ type, name, screen: ScreenInfo }` | `graphics.controller.updateScreen` and per-screen on Pi `graphics_upload` |
+| `screen_deleted` | `deviceId` | `{ type, name }` | `graphics.controller.deleteScreenById` and per-removed-name on Pi `graphics_upload` |
 | `screen_prefs_updated` | `uid` | `{ type, prefs: { pinnedNames, order } }` | `prefs.controller.updateScreenPrefs` |
 
 The frontend's `TelemetryProvider` (in `state/TelemetryContext.tsx`) demuxes these into:
@@ -134,9 +135,10 @@ Three exported functions in `realtime.service.ts`:
 
 | Function | Matches | Used by |
 |---|---|---|
-| `broadcastToDeviceClients(deviceId, message)` | all `/ws/client` tagged with `deviceId` | `graphics.controller` on screen write/delete |
+| `broadcastToDeviceClients(deviceId, message)` | all `/ws/client` tagged with `deviceId` | `graphics.controller` on screen write/delete; realtime service on Pi `graphics_upload` |
 | `broadcastToUserClients(uid, message)` | all `/ws/client` tagged with `uid` | `prefs.controller` on pref PUT |
-| `sendMessageToPi(deviceId, message)` | the single Pi connection for `deviceId` | `sendConfigToPi`, `sendSyncDownloadToPi` |
+| `sendMessageToPi(deviceId, message)` | the single Pi connection for `deviceId` | `devices.controller.updateTeamMembers`, and indirectly via `sendConfigToPi` |
+| `sendConfigToPi(deviceId, screenInfo)` | wraps `sendMessageToPi` with `{ type: "config_update", payload: <normalized screens> }` | `graphics.controller.updateScreen` via `pushFullConfigToPi` |
 
 Each returns early if the target socket is missing or `readyState !== OPEN`. None of them throw on send errors — they log and move on.
 

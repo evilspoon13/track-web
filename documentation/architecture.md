@@ -22,8 +22,8 @@ frontend/
     App.tsx                   # Auth branch: AppWithAuth (auth on) or AppNoAuth (auth off)
     AppWithAuth.tsx           # Firebase auth gate — LandingPage → EditorSkeleton → EditorLayout
                               #   Also detects device-unregistered state and shows "No Device Linked" screen
-    EditorLayout.tsx          # Main shell: top nav (4 pages) + page switch
-                              #   Pages: Screen Editor, Live Telemetry, Log Terminal, Device
+    EditorLayout.tsx          # Main shell: top nav (5 pages) + page switch
+                              #   Pages: Screen Editor, Live Telemetry, GPS Mapping, Log Terminal, Device
     types.ts                  # All shared types — single source of truth
     index.css                 # Tailwind base imports + global resets + custom animations
     components/
@@ -37,6 +37,7 @@ frontend/
       CanIdConfigurator.tsx   # Inline panel: add/edit/delete CAN frames and signals
       AnimatedSelect.tsx      # Custom animated select dropdown (used throughout ConfigPanel)
       TelemetryPage.tsx       # Live WebSocket telemetry dashboard — one GraphCard per live signal
+      MapPage.tsx             # GPS Mapping page — live track plot with per-lap colors
       LogTerminalPage.tsx     # Split-panel log viewer: history (left) + live feed (right); CSV export
       DevicePage.tsx          # Device ID display + team-member management
       EditorSkeleton.tsx      # Shimmer loading state (+ useDeferredSkeleton hook)
@@ -46,8 +47,9 @@ frontend/
                               #   Loads DBC + all screens + screen prefs on mount;
                               #   debounced auto-save for prefs (400 ms)
       TelemetryContext.tsx    # TelemetryProvider — maintains /ws/client connection with auto-reconnect,
-                              #   demuxes telemetry + cross-tab events (screen_updated / screen_deleted /
-                              #   screen_prefs_updated) and dispatches them into EditorContext
+                              #   demuxes telemetry + GPS + cross-tab events (screen_updated /
+                              #   screen_deleted / screen_prefs_updated) and dispatches them into
+                              #   EditorContext. Also owns gpsSession + latestGps for MapPage.
       editorReducer.ts        # Pure reducer — all state transitions, createInitialState()
     lib/
       firebase.ts             # Firebase SDK init (auth, app, db)
@@ -78,6 +80,7 @@ graph TD
     EditorLayout --> GridCanvas
     EditorLayout --> ConfigPanel
     EditorLayout --> TelemetryPage
+    EditorLayout --> MapPage
     EditorLayout --> LogTerminalPage
     EditorLayout --> DevicePage
 
@@ -88,7 +91,7 @@ graph TD
     ConfigPanel --> AnimatedSelect
 ```
 
-The four pages (`display` | `telemetry` | `logs` | `device`) are conditionally rendered in `EditorLayout` based on a local `page` state variable. There is no URL router — all navigation is in-component state.
+The five pages (`display` | `telemetry` | `map` | `logs` | `device`) are conditionally rendered in `EditorLayout` based on a local `page` state variable. There is no URL router — all navigation is in-component state.
 
 ## State Management
 
@@ -143,6 +146,7 @@ Note: the active-screen save flow is handled by `Navbar.executeSave`, which save
 1. **On mount** — opens `/ws/client`, sends `{ type: "auth", token, client_id }` after `open`, and re-connects with a 1 s delay on close.
 2. **On message** — demuxes by `type`:
    - `Telemetry` → updates the `signals` ring buffer (30 values/signal) and enqueues `rawMessages` (500-deep, flushed on a 50 ms timer to limit re-renders).
+   - `gps` → updates `latestGps` and appends to `gpsSession` (consumed by `MapPage`). Session auto-resets after 30 s without frames or 60 s below 1 km/h.
    - `screen_updated` → `dispatch({ type: "UPSERT_SCREEN", ... })`.
    - `screen_deleted` → `dispatch({ type: "REMOVE_SCREEN_BY_NAME", ... })`.
    - `screen_prefs_updated` → `dispatch({ type: "SET_SCREEN_PREFS", ... })`.

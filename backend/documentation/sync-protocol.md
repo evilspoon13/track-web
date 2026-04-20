@@ -1,162 +1,108 @@
-# Cloud ↔ Pi Sync Protocol
+# Cloud ↔ Pi Config Exchange
 
-The backend ships two logical files to the Pi:
+There is no versioned sync protocol in the current backend. Config flows between cloud and Pi as whole-file WSS messages on `/ws/pi`; both sides overwrite rather than merge, and nothing is versioned or replayed on reconnect. This document captures the two halves of that exchange.
 
-| `file_id` | Contents |
-|---|---|
-| `graphics` | Full screen list, serialised via `normalizeConfigForPi` (hex-encoded `can_id` fields) |
-| `display_dbc` | Raw `.dbc` text |
+| Direction | Message `type` | Contents |
+|---|---|---|
+| Cloud → Pi | `config_update` | Full normalized `{ screens }` payload |
+| Cloud → Pi | `team_members_update` | `{ team_members: string[] }` |
+| Pi → Cloud | `graphics_upload` | Full `{ screens }` payload (Pi captive portal edit) |
+| Pi → Cloud | `dbc_upload` | Raw `.dbc` text |
 
-Both are stored under `devices/{deviceId}/files/{fileId}` with a monotonic `version_id` so either side can detect a stale view and resolve it.
+See [realtime.md](realtime.md) for the full `/ws/pi` message catalogue.
 
-## File state shape
+## Cloud → Pi: graphics (`config_update`)
 
-```typescript
-FileState {
-  file_id: string             // "graphics" | "display_dbc"
-  version_id: number          // monotonic; starts at 1 on first commit
-  content_b64: string         // base64 payload
-  modified_by: "cloud" | "pi"
-  modified_at_ms: number
-  change_id: string           // UUID — idempotency key
-  content_size: number
-}
-```
-
-## Reconnect handshake at a glance
-
-```mermaid
-sequenceDiagram
-    participant PI as Pi
-    participant BE as Backend
-    participant FS as Firestore files/{fileId}
-
-    PI->>BE: /ws/pi open + auth headers
-    PI->>BE: { type: "sync_state", files: [ ... ] }
-
-    loop each file
-        BE->>FS: getFileState(deviceId, fileId)
-        FS-->>BE: FileState | null
-        BE->>BE: planForState(hello, fileId)
-        BE-->>PI: { type: "sync_plan", action, ... }
-        alt action === "send_download"
-            Note over PI: Pi adopts cloud revision
-        else action === "request_upload"
-            PI->>BE: { type: "sync_upload", file_id, base_version_id, change_id, content_b64 }
-            BE->>FS: commitPiUpload (txn)
-            alt commit ok
-                BE-->>PI: { type: "sync_commit", version_id, change_id }
-            else base rev mismatch
-                BE-->>PI: { type: "sync_reject", reason: "base_rev_mismatch", download: <current> }
-            end
-        else action === "noop"
-            Note over PI: no-op
-        end
-    end
-```
-
-## Commit flow (cloud-originated)
+Triggered on every `POST /api/graphics/screens/:screenId`:
 
 ```
 Frontend POST /api/graphics/screens/:name
-  → graphicsService.saveScreen                       (write devices/{deviceId}/screens/{name})
-  → broadcastToDeviceClients screen_updated          (fan-out to sibling tabs)
+  → graphicsService.saveScreen                 (write devices/{deviceId}/screens/<encodeURIComponent(name)>)
+  → broadcastToDeviceClients screen_updated    (fan-out to sibling tabs)
   → pushFullConfigToPi:
-      → graphicsService.getAllScreens                (rebuild full set)
-      → normalizeConfigForPi                         (hex-encode can_id)
-      → SyncService.commitCloudGeneratedGraphics     (new version_id in files/graphics)
-      → sendSyncDownloadToPi                         (if Pi is connected)
+      → graphicsService.getAllScreens          (rebuild full set)
+      → sendConfigToPi(deviceId, { screens })  (applies normalizeConfigForPi — hex-encodes can_id / x_can_id)
+        → sendMessageToPi → WSS { device_id, type: "config_update", payload }
 ```
 
-`commitCloudGeneratedGraphics` uses a Firestore transaction to:
-1. Read current `version_id` and `change_id` for the file.
-2. If `change_id` matches → return the current state (no-op; idempotent).
-3. Else increment `version_id`, overwrite `content_b64`, set `modified_by = "cloud"`, stamp `modified_at_ms`, store a new `change_id`.
+Key properties:
 
-The resulting `sync_download` message is the single source of truth for the Pi:
+- **Push is in-band only.** `sendMessageToPi` looks up the Pi's socket in `piSockets` and returns `false` if the socket is missing or not `OPEN`. Nothing persists the push for replay.
+- **No versioning.** The payload is the full set of screens every time. The Pi is expected to replace its local copy.
+- **`DELETE /api/graphics/screens/:screenId` does not push to the Pi.** Only the screen-deleted broadcast goes out on `/ws/client`. The Pi is re-synced on the next upsert.
+- **DBC writes (`POST /api/dbc`, `POST /api/dbc/upload`) do not push to the Pi.** The Pi reads DBC on its own schedule.
+
+Example frame the Pi receives:
 
 ```json
 {
-  "type": "sync_download",
-  "file_id": "graphics",
-  "version_id": 42,
-  "content_b64": "<base64 screens JSON>",
-  "modified_by": "cloud",
-  "modified_at_ms": 1712912400123
+  "device_id": "track-pi-01",
+  "type": "config_update",
+  "payload": {
+    "screens": [
+      {
+        "name": "Main",
+        "widgets": [
+          { "type": "gauge", "position": { "x": 0, "y": 0, "width": 2, "height": 2 },
+            "data": { "can_id": "0x100", "signal": "temp_c", "min": 0, "max": 120 } }
+        ]
+      }
+    ]
+  }
 }
 ```
 
-## Commit flow (Pi-originated)
+`normalizeConfigForPi` re-hex-encodes `can_id` / `graph.x_can_id` so the Pi sees strings like `"0x100"` regardless of how the frontend stored them (controller normalises the other direction to a number before writing Firestore).
 
-The Pi can edit `graphics` (its own config) and `display_dbc` (user-uploaded `.dbc` on the Pi) locally and push them up:
+## Cloud → Pi: team members (`team_members_update`)
 
-```
-Pi → /ws/pi { type: "sync_upload", file_id, base_version_id, change_id, content_b64 }
+Sent by `devices.controller.updateTeamMembers` after the Firestore write succeeds:
 
-Backend:
-  1. Validate payload (JSON for graphics, candied parse for dbc)
-  2. SyncService.commitPiUpload (transaction)
-       - if change_id already committed → return current state (idempotent)
-       - if base_version_id !== current → throw BaseRevMismatchError
-       - else increment + store; modified_by = "pi"
-  3. Mirror the change back into domain stores:
-       - graphicsService.replaceAllScreensFromPi (for graphics)
-       - dbcService.uploadDbc (for display_dbc)
-  4. Reply sync_commit { version_id, change_id } on success
-  5. Reply sync_reject { reason: "base_rev_mismatch", download: <current> } on conflict
-  6. Reply sync_reject { reason: "invalid_json" | "invalid_dbc" } on validation failure
+```json
+{ "device_id": "...", "type": "team_members_update", "team_members": ["alice@example.com"] }
 ```
 
-## Reconnect handshake
+Fire-and-forget, same in-band semantics as `config_update`.
 
-On every Pi reconnect, the Pi sends a `sync_state` message summarising its view of each file:
+## Pi → Cloud: graphics (`graphics_upload`)
+
+Pi-side edits (captive portal) push the full screen set up as:
 
 ```json
 {
-  "type": "sync_state",
-  "device_id": "...",
-  "files": [
-    { "file_id": "graphics",    "version_id": 41, "pending_upload": false },
-    { "file_id": "display_dbc", "version_id": 12, "pending_upload": true, "pending_base_version_id": 12 }
-  ]
+  "device_id": "track-pi-01",
+  "type": "graphics_upload",
+  "payload": { "screens": [ ... ] }
 }
 ```
 
-For each file the server responds with one `sync_plan`:
+`realtime.service` handles it asynchronously:
 
-| Server sees | `action` |
-|---|---|
-| No cloud copy, Pi has `pending_upload` rooted at rev 0 | `request_upload` with `expected_base_version_id: 0` |
-| No cloud copy, Pi has no pending upload | `noop` |
-| Pi has `pending_upload` and `pending_base_version_id === cloud.version_id` | `request_upload` with `expected_base_version_id: cloud.version_id` |
-| Pi has `pending_upload` but base rev is stale | `send_download` — Pi must drop its pending edit and re-base |
-| Pi's `version_id === cloud.version_id` and no pending | `noop` |
-| Pi's `version_id !== cloud.version_id` | `send_download` |
+1. Load the current screen names for the device.
+2. Diff against the names in the uploaded payload (names not in the upload are considered deletes).
+3. Call `graphicsService.replaceAllScreensFromPi(deviceId, payload)` which concurrently saves every uploaded screen and deletes the removed ones.
+4. Emit one `screen_updated` on `/ws/client` per screen in the upload and one `screen_deleted` per removed name, so sibling tabs re-render without reload.
 
-`send_download` inlines the full `sync_download` payload so the Pi can adopt immediately without a follow-up round-trip.
+Validation is minimal: the payload must have a `screens` array; individual screen objects are trusted. Failures are logged and the upload is dropped — there is no `sync_reject` reply.
 
-## Conflict resolution
+## Pi → Cloud: DBC (`dbc_upload`)
 
-The only conflict mode is **base-rev mismatch** (Pi based its edit on an older revision than what's currently in the cloud). There is no three-way merge — the cloud version wins, the Pi downloads it, and the user's Pi-side edits are discarded. This is acceptable because:
-
-1. Simultaneous edits on both the Pi captive portal and the web UI are rare in practice.
-2. The rejection includes the current download so the Pi can re-surface the latest state to the user.
-
-## Service API
-
-```typescript
-// sync.service.ts
-GRAPHICS_FILE_ID: "graphics"
-DISPLAY_DBC_FILE_ID: "display_dbc"
-SYNC_PROTOCOL_VERSION: number
-
-stableStringify(value): string
-getFileState(deviceId, fileId): Promise<FileState | null>
-buildDownloadMessage(state): SyncDownloadMessage
-planForState(deviceId, hello, fileId): Promise<SyncPlanMessage>
-commitCloudGeneratedGraphics(deviceId, payload): Promise<FileState>
-commitCloudRawFile(deviceId, fileId, raw): Promise<FileState>
-commitPiUpload(deviceId, fileId, content, change_id, base_version_id): Promise<{ state, alreadyCommitted }>
+```json
+{ "device_id": "track-pi-01", "type": "dbc_upload", "payload": "<raw .dbc text>" }
 ```
 
-`BaseRevMismatchError.current: FileState` is used by `realtime.service` to build the `sync_reject` response.
+`realtime.service` calls `dbcService.uploadDbc(deviceId, raw)` which writes the raw text to `devices/{deviceId}/dbc/content` and parses it via `candied` for the return value. Failures are logged; there is no reply frame.
+
+## What's missing (vs. a real sync protocol)
+
+- No per-file version IDs, no `change_id` idempotency, no rebase handshake.
+- No reconnect replay — a screen edited while the Pi was offline will only reach the Pi when the next screen upsert triggers another push.
+- No conflict resolution — whoever writes last wins. If the Pi pushes `graphics_upload` while the cloud is pushing `config_update` the two may race.
+- No per-field delta — every push is the whole screen set.
+
+Code references:
+
+- `src/modules/realtime/realtime.service.ts` — `sendConfigToPi`, `sendMessageToPi`, `handlePiMessage` (handles `graphics_upload`, `dbc_upload`)
+- `src/modules/graphics/graphics.controller.ts` — `pushFullConfigToPi`
+- `src/modules/graphics/graphics.service.ts` — `replaceAllScreensFromPi`
+- `src/modules/dbc/dbc.service.ts` — `uploadDbc`

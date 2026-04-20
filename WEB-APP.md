@@ -15,7 +15,7 @@ track-web/
   Dockerfile.emulator
 ```
 
-The frontend is a drag-and-drop dashboard editor split across four pages: **Screen Editor**, **Live Telemetry**, **Log Terminal**, and **Device**. The backend persists everything to Firestore, broadcasts writes to every open client tab, and pushes the full screen set to the on-car Pi over a versioned sync protocol.
+The frontend is a drag-and-drop dashboard editor split across four pages: **Screen Editor**, **Live Telemetry**, **Log Terminal**, and **Device**. The backend persists everything to Firestore, broadcasts writes to every open client tab, and pushes the full screen set to the on-car Pi as a fire-and-forget `config_update` over `/ws/pi`.
 
 ---
 
@@ -187,10 +187,9 @@ devices/
     screens/{name}          # dashboard layouts
     dbc/content             # raw .dbc text
     logs/{chunkId}          # 30k-entry chunks
-    files/{fileId}          # versioned sync store (graphics, display_dbc)
 ```
 
-Every screen write also commits to `devices/{deviceId}/files/graphics` via `SyncService.commitCloudGeneratedGraphics`, producing the `sync_download` message the Pi consumes on reconnect. See `documentation/data-model.md` for the full field-level schema.
+Every screen write also triggers `pushFullConfigToPi(deviceId)`, which rebuilds the full screen set and sends `{ type: "config_update", payload }` over `/ws/pi`. Fire-and-forget: if the Pi is offline the change is lost until the next save. See `documentation/data-model.md` for the full field-level schema.
 
 ---
 

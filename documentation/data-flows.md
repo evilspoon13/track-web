@@ -88,7 +88,7 @@ sequenceDiagram
 
 ## 3. Save Sequence
 
-Clicking Save in `Navbar` saves **every dirty screen** in parallel, then the DBC if `canIdsDirty`. Each screen POST triggers a backend-side cross-tab broadcast and a sync-store commit destined for the Pi.
+Clicking Save in `Navbar` saves **every dirty screen** in parallel, then the DBC if `canIdsDirty`. Each screen POST triggers a backend-side cross-tab broadcast and a live `config_update` push to the Pi.
 
 ```mermaid
 sequenceDiagram
@@ -96,7 +96,6 @@ sequenceDiagram
     participant IO as layoutIO.ts
     participant API as Backend API
     participant FS as Firebase Firestore
-    participant SYNC as SyncService
     participant WS as broadcastToDeviceClients
     participant PI as Pi (cloud-bridge)
 
@@ -109,8 +108,8 @@ sequenceDiagram
         IO->>API: POST /api/graphics/screens/{name}
         API->>FS: write devices/{deviceId}/screens/{name}
         API->>WS: broadcast screen_updated → other tabs
-        API->>SYNC: commitCloudGeneratedGraphics(allScreens)
-        SYNC->>PI: /ws/pi sync_download (next reconnect or live)
+        API->>PI: pushFullConfigToPi → /ws/pi { type: "config_update", payload }
+        Note over API,PI: Fire-and-forget. If Pi is offline,<br/>the change is lost until the next save.
         API-->>IO: { success: true }
     end
 
@@ -127,13 +126,13 @@ sequenceDiagram
     NB->>NB: "Saved!" toast (2s)
 ```
 
-Screen prefs are **not** part of this flow — they auto-save on a separate 400 ms debounce (see §7).
+Screen prefs are **not** part of this flow — they auto-save on a separate 400 ms debounce (see §7). DBC saves do not push to the Pi (the Pi uploads its own DBC via `dbc_upload` on the captive-portal path).
 
 ---
 
 ## 4. Live Telemetry Flow
 
-`TelemetryProvider` owns the `/ws/client` connection. `TelemetryPage` and the log terminal's live feed both read from it via `useTelemetry()`.
+`TelemetryProvider` owns the `/ws/client` connection. `TelemetryPage`, `MapPage`, and the log terminal's live feed all read from it via `useTelemetry()`. In addition to `Telemetry` frames, the provider also handles `gps` frames — each incoming point updates `latestGps` and appends to `gpsSession`, which `MapPage` reads to draw the live track.
 
 ```mermaid
 sequenceDiagram
